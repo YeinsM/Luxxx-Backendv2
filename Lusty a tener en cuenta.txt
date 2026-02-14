@@ -1,0 +1,4 @@
+Que salga input de confirmacion del correo
+Debe confirmar el email antes de poder loguearse en la plataforma
+
+Cuando se registre en el Name del admin dashboard, debe salir el nombre artistico que registro
