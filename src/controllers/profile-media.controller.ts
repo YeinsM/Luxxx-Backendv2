@@ -1,10 +1,10 @@
 import { Request, Response } from 'express';
 import { getCloudinaryService } from '../services/cloudinary.service';
-import { getDatabaseService } from '../services/database.service';
-import { MediaFile } from '../models/user.model';
+import { getAppDatabaseService } from '../services/app-database.service';
+import { UserMedia } from '../models/advertisement.model';
 
 const cloudinaryService = getCloudinaryService();
-const databaseService = getDatabaseService();
+const db = getAppDatabaseService();
 
 // Extend Request type to include user from auth middleware
 interface AuthRequest extends Request {
@@ -27,16 +27,11 @@ export const getMyPhotos = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const user = await databaseService.getUserById(userId);
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
+    const photos = await db.getUserMedia(userId, 'image');
 
     res.status(200).json({
       message: 'Photos retrieved successfully',
-      data: user.photos || [],
+      data: photos,
     });
   } catch (error: any) {
     console.error('Get photos error:', error);
@@ -56,16 +51,11 @@ export const getMyVideos = async (req: Request, res: Response): Promise<void> =>
       return;
     }
 
-    const user = await databaseService.getUserById(userId);
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
+    const videos = await db.getUserMedia(userId, 'video');
 
     res.status(200).json({
       message: 'Videos retrieved successfully',
-      data: user.videos || [],
+      data: videos,
     });
   } catch (error: any) {
     console.error('Get videos error:', error);
@@ -91,13 +81,6 @@ export const uploadMyPhotos = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const user = await databaseService.getUserById(userId);
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
     // Upload photos to Cloudinary
     const uploadResults = await cloudinaryService.uploadMultipleImages(photos, {
       folder: `lusty/users/${userId}/photos`,
@@ -108,23 +91,20 @@ export const uploadMyPhotos = async (req: Request, res: Response): Promise<void>
       },
     });
 
-    // Create MediaFile objects
-    const newPhotos: MediaFile[] = uploadResults.map((result) => ({
-      url: result.url,
-      publicId: result.publicId,
-      width: result.width,
-      height: result.height,
-      format: result.format,
-      resourceType: 'image' as const,
-      uploadedAt: new Date(),
-    }));
-
-    // Update user with new photos
-    const updatedPhotos = [...(user.photos || []), ...newPhotos];
-    const updatedUser = await databaseService.updateUser(userId, {
-      ...user,
-      photos: updatedPhotos,
-    });
+    // Save each photo to user_media table
+    const newPhotos: UserMedia[] = [];
+    for (const result of uploadResults) {
+      const media = await db.createUserMedia({
+        userId,
+        url: result.url,
+        publicId: result.publicId,
+        resourceType: 'image',
+        width: result.width,
+        height: result.height,
+        format: result.format,
+      });
+      newPhotos.push(media);
+    }
 
     res.status(200).json({
       message: `${newPhotos.length} photos uploaded successfully`,
@@ -154,13 +134,6 @@ export const uploadMyVideos = async (req: Request, res: Response): Promise<void>
       return;
     }
 
-    const user = await databaseService.getUserById(userId);
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
     // Upload videos to Cloudinary
     const uploadPromises = videos.map((video) =>
       cloudinaryService.uploadBase64Video(video, {
@@ -174,23 +147,22 @@ export const uploadMyVideos = async (req: Request, res: Response): Promise<void>
 
     const uploadResults = await Promise.all(uploadPromises);
 
-    // Create MediaFile objects
-    const newVideos: MediaFile[] = uploadResults.map((result) => ({
-      url: result.url,
-      publicId: result.publicId,
-      width: result.width,
-      height: result.height,
-      format: result.format,
-      resourceType: 'video' as const,
-      uploadedAt: new Date(),
-    }));
-
-    // Update user with new videos
-    const updatedVideos = [...(user.videos || []), ...newVideos];
-    const updatedUser = await databaseService.updateUser(userId, {
-      ...user,
-      videos: updatedVideos,
-    });
+    // Save each video to user_media table
+    const newVideos: UserMedia[] = [];
+    for (const result of uploadResults) {
+      const media = await db.createUserMedia({
+        userId,
+        url: result.url,
+        publicId: result.publicId,
+        resourceType: 'video',
+        width: result.width,
+        height: result.height,
+        format: result.format,
+        duration: result.duration,
+        thumbnailUrl: result.thumbnailUrl,
+      });
+      newVideos.push(media);
+    }
 
     res.status(200).json({
       message: `${newVideos.length} videos uploaded successfully`,
@@ -220,30 +192,16 @@ export const deleteMyPhoto = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const user = await databaseService.getUserById(userId);
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    // Check if photo belongs to user
-    const photoExists = user.photos?.some((photo) => photo.publicId === publicId);
-
-    if (!photoExists) {
-      res.status(404).json({ error: 'Photo not found' });
-      return;
-    }
-
     // Delete from Cloudinary
     await cloudinaryService.deleteImage(publicId);
 
-    // Remove from user's photos
-    const updatedPhotos = user.photos!.filter((photo) => photo.publicId !== publicId);
-    await databaseService.updateUser(userId, {
-      ...user,
-      photos: updatedPhotos,
-    });
+    // Delete from user_media table
+    const deleted = await db.deleteUserMediaByPublicId(publicId, userId);
+
+    if (!deleted) {
+      res.status(404).json({ error: 'Photo not found' });
+      return;
+    }
 
     res.status(200).json({
       message: 'Photo deleted successfully',
@@ -272,30 +230,16 @@ export const deleteMyVideo = async (req: Request, res: Response): Promise<void> 
       return;
     }
 
-    const user = await databaseService.getUserById(userId);
-
-    if (!user) {
-      res.status(404).json({ error: 'User not found' });
-      return;
-    }
-
-    // Check if video belongs to user
-    const videoExists = user.videos?.some((video) => video.publicId === publicId);
-
-    if (!videoExists) {
-      res.status(404).json({ error: 'Video not found' });
-      return;
-    }
-
     // Delete from Cloudinary
     await cloudinaryService.deleteVideo(publicId);
 
-    // Remove from user's videos
-    const updatedVideos = user.videos!.filter((video) => video.publicId !== publicId);
-    await databaseService.updateUser(userId, {
-      ...user,
-      videos: updatedVideos,
-    });
+    // Delete from user_media table
+    const deleted = await db.deleteUserMediaByPublicId(publicId, userId);
+
+    if (!deleted) {
+      res.status(404).json({ error: 'Video not found' });
+      return;
+    }
 
     res.status(200).json({
       message: 'Video deleted successfully',

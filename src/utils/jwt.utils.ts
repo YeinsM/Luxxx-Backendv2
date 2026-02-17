@@ -5,6 +5,7 @@ export interface JwtPayload {
   userId: string;
   email: string;
   userType: string;
+  tokenVersion: number;
 }
 
 export const generateToken = (payload: JwtPayload): string => {

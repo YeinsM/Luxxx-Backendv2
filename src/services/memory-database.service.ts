@@ -36,6 +36,12 @@ export class MemoryDatabaseService implements DatabaseService {
     return user || null;
   }
 
+  async getUserByPasswordResetTokenHash(tokenHash: string): Promise<User | null> {
+    const users = Array.from(this.users.values());
+    const user = users.find((u) => u.passwordResetTokenHash === tokenHash);
+    return user || null;
+  }
+
   async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
     const user = await this.getUserById(id);
     if (!user) {

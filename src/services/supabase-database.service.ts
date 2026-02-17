@@ -90,6 +90,20 @@ export class SupabaseDatabaseService implements DatabaseService {
     return this.deserializeUser(data);
   }
 
+  async getUserByPasswordResetTokenHash(tokenHash: string): Promise<User | null> {
+    const { data, error } = await this.client
+      .from('users')
+      .select('*')
+      .eq('password_reset_token_hash', tokenHash)
+      .single();
+
+    if (error || !data) {
+      return null;
+    }
+
+    return this.deserializeUser(data);
+  }
+
   async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
     // Serialize partial updates to snake_case
     const serializedUpdates: any = {};
@@ -97,6 +111,10 @@ export class SupabaseDatabaseService implements DatabaseService {
     if ('emailVerified' in updates) serializedUpdates.email_verified = updates.emailVerified;
     if ('emailVerificationToken' in updates) serializedUpdates.email_verification_token = updates.emailVerificationToken || null;
     if ('emailVerificationExpires' in updates) serializedUpdates.email_verification_expires = updates.emailVerificationExpires?.toISOString() || null;
+    if ('passwordResetTokenHash' in updates) serializedUpdates.password_reset_token_hash = updates.passwordResetTokenHash || null;
+    if ('passwordResetExpires' in updates) serializedUpdates.password_reset_expires = updates.passwordResetExpires?.toISOString() || null;
+    if ('passwordResetUsedAt' in updates) serializedUpdates.password_reset_used_at = updates.passwordResetUsedAt?.toISOString() || null;
+    if ('tokenVersion' in updates) serializedUpdates.token_version = updates.tokenVersion;
     if ('isActive' in updates) serializedUpdates.is_active = updates.isActive;
     if ('password' in updates) serializedUpdates.password = updates.password;
     
@@ -130,12 +148,16 @@ export class SupabaseDatabaseService implements DatabaseService {
       email: user.email.toLowerCase(),
       password: user.password,
       user_type: user.userType,
+      token_version: user.tokenVersion,
       created_at: user.createdAt.toISOString(),
       updated_at: user.updatedAt.toISOString(),
       is_active: user.isActive,
       email_verified: user.emailVerified,
       email_verification_token: user.emailVerificationToken || null,
       email_verification_expires: user.emailVerificationExpires?.toISOString() || null,
+      password_reset_token_hash: user.passwordResetTokenHash || null,
+      password_reset_expires: user.passwordResetExpires?.toISOString() || null,
+      password_reset_used_at: user.passwordResetUsedAt?.toISOString() || null,
       // Type-specific fields
       ...(user.userType === UserType.ESCORT && {
         name: (user as any).name,
@@ -170,12 +192,16 @@ export class SupabaseDatabaseService implements DatabaseService {
       email: data.email,
       password: data.password,
       userType: data.user_type as UserType,
+      tokenVersion: data.token_version ?? 0,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
       isActive: data.is_active,
       emailVerified: data.email_verified,
       emailVerificationToken: data.email_verification_token,
       emailVerificationExpires: data.email_verification_expires ? new Date(data.email_verification_expires) : undefined,
+      passwordResetTokenHash: data.password_reset_token_hash || undefined,
+      passwordResetExpires: data.password_reset_expires ? new Date(data.password_reset_expires) : undefined,
+      passwordResetUsedAt: data.password_reset_used_at ? new Date(data.password_reset_used_at) : undefined,
     };
 
     switch (data.user_type) {

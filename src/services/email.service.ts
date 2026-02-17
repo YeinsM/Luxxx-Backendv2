@@ -201,6 +201,84 @@ export class EmailService {
     }
   }
 
+  async sendPasswordResetEmail(user: User, resetToken: string): Promise<boolean> {
+    if (!this.transporter) {
+      console.log('Email not sent - transporter not configured');
+      return false;
+    }
+
+    try {
+      const resetUrl = `${config.email.frontendUrl}/reset-password?token=${resetToken}`;
+
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
+                      <h1 style="color: #ffffff; margin: 0; font-size: 28px;">Recuperar contraseña</h1>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding: 40px 30px;">
+                      <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 20px 0;">
+                        Recibimos una solicitud para restablecer tu contraseña.
+                      </p>
+                      <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 30px 0;">
+                        Haz clic en el botón para crear una nueva contraseña. Este enlace expira en 30 minutos y solo puede usarse una vez.
+                      </p>
+
+                      <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td align="center" style="padding: 20px 0;">
+                            <a href="${resetUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
+                              Restablecer contraseña
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <p style="color: #666666; font-size: 13px; line-height: 20px; margin: 30px 0 0 0; word-break: break-all;">
+                        Si el botón no funciona, copia y pega este enlace:<br/>
+                        <a href="${resetUrl}">${resetUrl}</a>
+                      </p>
+
+                      <p style="color: #666666; font-size: 14px; line-height: 20px; margin: 20px 0 0 0;">
+                        Si no solicitaste este cambio, ignora este correo.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      await this.transporter.sendMail({
+        from: `"${config.email.fromName}" <${config.email.fromEmail}>`,
+        to: user.email,
+        subject: 'Restablecer contraseña - Lusty',
+        html,
+      });
+
+      console.log(`✅ Password reset email sent to ${user.email}`);
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to send password reset email:', error);
+      return false;
+    }
+  }
+
   private getWelcomeSubject(userType: UserType): string {
     const subjects = {
       escort: '¡Bienvenida a Lusty! 💃',

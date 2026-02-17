@@ -35,7 +35,8 @@ export class AppDatabaseService {
   async createAdvertisement(userId: string, dto: CreateAdvertisementDto): Promise<Advertisement> {
     const { services, rates, ...adData } = dto;
 
-    const row = this.serializeAd({ ...adData, userId } as any);
+    // Set status to 'active' by default, visibility is controlled by isOnline
+    const row = this.serializeAd({ ...adData, userId, status: 'active' } as any);
     const { data, error } = await this.client
       .from('advertisements')
       .insert([row])
@@ -207,7 +208,7 @@ export class AppDatabaseService {
     let q = this.client
       .from('advertisements')
       .select('*', { count: 'exact' })
-      .eq('status', 'active');
+      .eq('is_online', true); // Filter by isOnline instead of status
 
     if (category && category !== 'all') {
       q = q.eq('category', category);
@@ -250,11 +251,23 @@ export class AppDatabaseService {
     return { profiles, total: count || 0 };
   }
 
-  async getProfileStats(): Promise<{ total: number; online: number; premium: number; avgRating: number }> {
+  async getProfileStats(): Promise<{ 
+    total: number; 
+    online: number; 
+    premium: number; 
+    avgRating: number;
+    byCategory: {
+      all: number;
+      escort: number;
+      companion: number;
+      massage: number;
+      virtual: number;
+    };
+  }> {
     const { data, error } = await this.client
       .from('advertisements')
-      .select('is_online,is_premium,rating')
-      .eq('status', 'active');
+      .select('is_online,is_premium,rating,category')
+      .eq('is_online', true); // Only count online advertisements
 
     if (error) throw new InternalServerError('Failed to get stats');
 
@@ -264,7 +277,22 @@ export class AppDatabaseService {
     const premium = rows.filter((r: any) => r.is_premium).length;
     const avgRating = total > 0 ? rows.reduce((sum: number, r: any) => sum + (parseFloat(r.rating) || 0), 0) / total : 0;
 
-    return { total, online, premium, avgRating: Math.round(avgRating * 10) / 10 };
+    // Count by category
+    const byCategory = {
+      all: total,
+      escort: rows.filter((r: any) => r.category === 'escort').length,
+      companion: rows.filter((r: any) => r.category === 'companion').length,
+      massage: rows.filter((r: any) => r.category === 'massage').length,
+      virtual: rows.filter((r: any) => r.category === 'virtual').length,
+    };
+
+    return { 
+      total, 
+      online, 
+      premium, 
+      avgRating: Math.round(avgRating * 10) / 10,
+      byCategory,
+    };
   }
 
   async incrementViewCount(id: string): Promise<void> {

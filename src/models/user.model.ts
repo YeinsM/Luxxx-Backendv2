@@ -19,6 +19,7 @@ export interface BaseUser {
   id: string;
   email: string;
   password: string;
+  tokenVersion: number;
   userType: UserType;
   createdAt: Date;
   updatedAt: Date;
@@ -26,6 +27,9 @@ export interface BaseUser {
   emailVerified: boolean;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
+  passwordResetTokenHash?: string;
+  passwordResetExpires?: Date;
+  passwordResetUsedAt?: Date;
   photos: MediaFile[];
   videos: MediaFile[];
 }
@@ -104,6 +108,15 @@ export interface RegisterClubDto {
 export interface LoginDto {
   email: string;
   password: string;
+}
+
+export interface ForgotPasswordDto {
+  email: string;
+}
+
+export interface ResetPasswordDto {
+  token: string;
+  newPassword: string;
 }
 
 // Response types

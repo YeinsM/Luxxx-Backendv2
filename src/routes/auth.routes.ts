@@ -8,6 +8,8 @@ import {
   loginValidation,
   resendVerificationValidation,
   changePasswordValidation,
+  forgotPasswordValidation,
+  resetPasswordValidation,
 } from '../middleware/validation.middleware';
 import { authMiddleware } from '../middleware/auth.middleware';
 
@@ -104,6 +106,38 @@ router.put(
   authMiddleware,
   changePasswordValidation,
   authController.changePassword.bind(authController)
+);
+
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Send password reset email
+ * @access  Public
+ */
+router.post(
+  '/forgot-password',
+  forgotPasswordValidation,
+  authController.forgotPassword.bind(authController)
+);
+
+/**
+ * @route   GET /api/auth/reset-password/validate?token=...
+ * @desc    Validate password reset token
+ * @access  Public
+ */
+router.get(
+  '/reset-password/validate',
+  authController.validateResetToken.bind(authController)
+);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password using one-time token
+ * @access  Public
+ */
+router.post(
+  '/reset-password',
+  resetPasswordValidation,
+  authController.resetPassword.bind(authController)
 );
 
 export default router;

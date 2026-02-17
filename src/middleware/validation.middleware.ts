@@ -107,6 +107,17 @@ export const changePasswordValidation = [
     .withMessage('New password must be at least 6 characters'),
 ];
 
+export const forgotPasswordValidation = [
+  body('email').trim().isEmail().withMessage('Valid email is required'),
+];
+
+export const resetPasswordValidation = [
+  body('token').trim().notEmpty().withMessage('Token is required'),
+  body('newPassword')
+    .isLength({ min: 6 })
+    .withMessage('New password must be at least 6 characters'),
+];
+
 export const createAdvertisementValidation = [
   body('name')
     .trim()

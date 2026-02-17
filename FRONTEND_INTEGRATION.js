@@ -1,7 +1,11 @@
 // Example integration for Luxxx Frontend
 // How to connect the registration forms to the backend API
 
-const API_BASE_URL = 'http://localhost:5000/api';
+// SWITCH: 0 = localhost, 1 = DevTunnels
+const USE_TUNNEL = 1;
+const API_BASE_URL = USE_TUNNEL
+  ? 'https://v9xj6vhl-5000.use2.devtunnels.ms/api'
+  : 'http://localhost:5000/api';
 
 // Example 1: Register Escort
 export async function registerEscort(formData) {

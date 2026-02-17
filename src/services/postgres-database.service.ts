@@ -82,6 +82,12 @@ export class PostgresDatabaseService implements DatabaseService {
     return result.rows.length > 0 ? this.deserializeUser(result.rows[0]) : null;
   }
 
+  async getUserByPasswordResetTokenHash(tokenHash: string): Promise<User | null> {
+    const query = 'SELECT * FROM users WHERE password_reset_token_hash = $1';
+    const result = await this.pool.query(query, [tokenHash]);
+    return result.rows.length > 0 ? this.deserializeUser(result.rows[0]) : null;
+  }
+
   async updateUser(id: string, updates: Partial<User>): Promise<User | null> {
     // Build SET clause dynamically from the updates
     const snakeUpdates = this.partialSerialize(updates);
@@ -129,11 +135,15 @@ export class PostgresDatabaseService implements DatabaseService {
       email: user.email.toLowerCase(),
       password: user.password,
       user_type: user.userType,
+      token_version: user.tokenVersion,
       is_active: user.isActive,
       email_verified: user.emailVerified,
       email_verification_token: user.emailVerificationToken || null,
       email_verification_expires:
         user.emailVerificationExpires?.toISOString() || null,
+      password_reset_token_hash: user.passwordResetTokenHash || null,
+      password_reset_expires: user.passwordResetExpires?.toISOString() || null,
+      password_reset_used_at: user.passwordResetUsedAt?.toISOString() || null,
       created_at: user.createdAt.toISOString(),
       updated_at: user.updatedAt.toISOString(),
     };
@@ -174,10 +184,14 @@ export class PostgresDatabaseService implements DatabaseService {
       email: 'email',
       password: 'password',
       userType: 'user_type',
+      tokenVersion: 'token_version',
       isActive: 'is_active',
       emailVerified: 'email_verified',
       emailVerificationToken: 'email_verification_token',
       emailVerificationExpires: 'email_verification_expires',
+      passwordResetTokenHash: 'password_reset_token_hash',
+      passwordResetExpires: 'password_reset_expires',
+      passwordResetUsedAt: 'password_reset_used_at',
       name: 'name',
       phone: 'phone',
       city: 'city',
@@ -206,6 +220,7 @@ export class PostgresDatabaseService implements DatabaseService {
       email: data.email,
       password: data.password,
       userType: data.user_type as UserType,
+      tokenVersion: data.token_version ?? 0,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
       isActive: data.is_active,
@@ -213,6 +228,13 @@ export class PostgresDatabaseService implements DatabaseService {
       emailVerificationToken: data.email_verification_token,
       emailVerificationExpires: data.email_verification_expires
         ? new Date(data.email_verification_expires)
+        : undefined,
+      passwordResetTokenHash: data.password_reset_token_hash || undefined,
+      passwordResetExpires: data.password_reset_expires
+        ? new Date(data.password_reset_expires)
+        : undefined,
+      passwordResetUsedAt: data.password_reset_used_at
+        ? new Date(data.password_reset_used_at)
         : undefined,
       photos: [],
       videos: [],

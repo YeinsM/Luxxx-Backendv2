@@ -15,6 +15,8 @@ export interface UploadResult {
   height: number;
   format: string;
   resourceType: string;
+  duration?: number; // For videos
+  thumbnailUrl?: string; // For videos
 }
 
 export interface UploadOptions {
@@ -242,6 +244,8 @@ export class CloudinaryService {
         height: result.height,
         format: result.format,
         resourceType: result.resource_type,
+        duration: result.duration,
+        thumbnailUrl: result.secure_url?.replace(/\.[^.]+$/, '.jpg'), // Generate thumbnail URL
       };
     } catch (error: any) {
       console.error('Error uploading video to Cloudinary:', error);

@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
+import { createHash, randomBytes } from 'crypto';
 import {
   User,
   UserType,
@@ -10,6 +11,8 @@ import {
   AuthResponse,
   RegistrationResponse,
   ResendVerificationDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
   EscortUser,
   MemberUser,
   AgencyUser,
@@ -44,6 +47,7 @@ export class AuthService {
       age: dto.age,
       createdAt: new Date(),
       updatedAt: new Date(),
+      tokenVersion: 0,
       isActive: true,
       emailVerified: false,
       emailVerificationToken: verificationToken,
@@ -83,6 +87,7 @@ export class AuthService {
       city: dto.city,
       createdAt: new Date(),
       updatedAt: new Date(),
+      tokenVersion: 0,
       isActive: true,
       emailVerified: false,
       emailVerificationToken: verificationToken,
@@ -124,6 +129,7 @@ export class AuthService {
       website: dto.website,
       createdAt: new Date(),
       updatedAt: new Date(),
+      tokenVersion: 0,
       isActive: true,
       emailVerified: false,
       emailVerificationToken: verificationToken,
@@ -167,6 +173,7 @@ export class AuthService {
       openingHours: dto.openingHours,
       createdAt: new Date(),
       updatedAt: new Date(),
+      tokenVersion: 0,
       isActive: true,
       emailVerified: false,
       emailVerificationToken: verificationToken,
@@ -190,14 +197,15 @@ export class AuthService {
   }
 
   async login(dto: LoginDto): Promise<AuthResponse> {
-    const user = await this.db.getUserByEmail(dto.email);
+    const normalizedEmail = dto.email.toLowerCase();
+    const user = await this.db.getUserByEmail(normalizedEmail);
     if (!user) {
-      throw new UnauthorizedError('Invalid credentials');
+      throw new UnauthorizedError('El email no existe en nuestra base de datos');
     }
 
     const isPasswordValid = await comparePassword(dto.password, user.password);
     if (!isPasswordValid) {
-      throw new UnauthorizedError('Invalid credentials');
+      throw new UnauthorizedError('La contraseña es incorrecta');
     }
 
     if (!user.isActive) {
@@ -253,7 +261,7 @@ export class AuthService {
   }
 
   async resendVerification(dto: ResendVerificationDto): Promise<{ success: boolean; message: string }> {
-    const user = await this.db.getUserByEmail(dto.email);
+    const user = await this.db.getUserByEmail(dto.email.toLowerCase());
     
     if (!user) {
       throw new BadRequestError('Email no encontrado');
@@ -298,11 +306,104 @@ export class AuthService {
     }
 
     const hashedPassword = await hashPassword(newPassword);
-    await this.db.updateUser(userId, { password: hashedPassword } as any);
+    await this.db.updateUser(userId, {
+      password: hashedPassword,
+      tokenVersion: user.tokenVersion + 1,
+      passwordResetTokenHash: undefined,
+      passwordResetExpires: undefined,
+      passwordResetUsedAt: undefined,
+    } as any);
 
     return {
       success: true,
       message: 'Password changed successfully',
+    };
+  }
+
+  async requestPasswordReset(dto: ForgotPasswordDto): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = dto.email.toLowerCase();
+    const user = await this.db.getUserByEmail(normalizedEmail);
+
+    if (!user) {
+      return {
+        success: true,
+        message: 'Si el email existe, enviamos instrucciones para recuperar tu contraseña.',
+      };
+    }
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = this.hashResetToken(rawToken);
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+
+    await this.db.updateUser(user.id, {
+      passwordResetTokenHash: tokenHash,
+      passwordResetExpires: expiresAt,
+      passwordResetUsedAt: undefined,
+    });
+
+    this.emailService.sendPasswordResetEmail(user, rawToken).catch((error) => {
+      console.error('Failed to send password reset email:', error);
+    });
+
+    return {
+      success: true,
+      message: 'Si el email existe, enviamos instrucciones para recuperar tu contraseña.',
+    };
+  }
+
+  async validatePasswordResetToken(token: string): Promise<{ valid: boolean }> {
+    const tokenHash = this.hashResetToken(token);
+    const user = await this.db.getUserByPasswordResetTokenHash(tokenHash);
+
+    if (!user) {
+      throw new BadRequestError('Token inválido o expirado');
+    }
+
+    if (!user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+      throw new BadRequestError('Token inválido o expirado');
+    }
+
+    if (user.passwordResetUsedAt) {
+      throw new BadRequestError('Token inválido o expirado');
+    }
+
+    return { valid: true };
+  }
+
+  async resetPassword(dto: ResetPasswordDto): Promise<{ success: boolean; message: string }> {
+    this.validatePassword(dto.newPassword);
+
+    const tokenHash = this.hashResetToken(dto.token);
+    const user = await this.db.getUserByPasswordResetTokenHash(tokenHash);
+
+    if (!user) {
+      throw new BadRequestError('Token inválido o expirado');
+    }
+
+    if (!user.passwordResetExpires || user.passwordResetExpires < new Date()) {
+      throw new BadRequestError('Token inválido o expirado');
+    }
+
+    if (user.passwordResetUsedAt) {
+      throw new BadRequestError('Token inválido o expirado');
+    }
+
+    const hashedPassword = await hashPassword(dto.newPassword);
+    const updatedUser = await this.db.updateUser(user.id, {
+      password: hashedPassword,
+      tokenVersion: user.tokenVersion + 1,
+      passwordResetTokenHash: undefined,
+      passwordResetExpires: undefined,
+      passwordResetUsedAt: new Date(),
+    } as any);
+
+    if (!updatedUser) {
+      throw new BadRequestError('No se pudo actualizar la contraseña');
+    }
+
+    return {
+      success: true,
+      message: 'Contraseña actualizada correctamente. Inicia sesión nuevamente.',
     };
   }
 
@@ -317,6 +418,7 @@ export class AuthService {
       userId: user.id,
       email: user.email,
       userType: user.userType,
+      tokenVersion: user.tokenVersion,
     });
 
     return {
@@ -328,5 +430,9 @@ export class AuthService {
   private removePassword(user: User): Omit<User, 'password'> {
     const { password, ...userWithoutPassword } = user;
     return userWithoutPassword;
+  }
+
+  private hashResetToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 }

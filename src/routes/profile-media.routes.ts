@@ -40,17 +40,17 @@ router.post('/photos', authMiddleware, uploadMyPhotos);
 router.post('/videos', authMiddleware, uploadMyVideos);
 
 /**
- * @route   DELETE /api/profile/media/photos/:id
- * @desc    Delete a photo
+ * @route   DELETE /api/profile/media/photos
+ * @desc    Delete a photo (body: { publicId })
  * @access  Private
  */
-router.delete('/photos/:id', authMiddleware, deleteMyPhoto);
+router.delete('/photos', authMiddleware, deleteMyPhoto);
 
 /**
- * @route   DELETE /api/profile/media/videos/:id
- * @desc    Delete a video
+ * @route   DELETE /api/profile/media/videos
+ * @desc    Delete a video (body: { publicId })
  * @access  Private
  */
-router.delete('/videos/:id', authMiddleware, deleteMyVideo);
+router.delete('/videos', authMiddleware, deleteMyVideo);
 
 export default router;

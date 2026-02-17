@@ -2,6 +2,17 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+// ══════════════════════════════════════════════════════════════
+// CONFIGURACIÓN DE ENTORNO
+// ══════════════════════════════════════════════════════════════
+// Todas las URLs y configuraciones se toman de variables de entorno
+// Desarrollo: archivo .env local
+// Producción: Variables configuradas en Render
+// ══════════════════════════════════════════════════════════════
+
+const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const DEFAULT_CORS_ORIGINS = [FRONTEND_URL, 'http://localhost:3000'];
+
 export const config = {
   port: process.env.PORT || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
@@ -15,10 +26,12 @@ export const config = {
     serviceKey: process.env.SUPABASE_SERVICE_KEY || '',
   },
   cors: {
-    origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+    origin: process.env.CORS_ORIGIN
+      ? process.env.CORS_ORIGIN.split(',').map(url => url.trim())
+      : DEFAULT_CORS_ORIGINS,
   },
   database: {
-    mode: process.env.DB_MODE || 'memory', // 'memory' | 'postgres' | 'supabase'
+    mode: process.env.DB_MODE || 'memory',
     url: process.env.DATABASE_URL || '',
   },
   email: {
@@ -29,7 +42,7 @@ export const config = {
     password: process.env.EMAIL_PASSWORD || '',
     fromEmail: process.env.EMAIL_FROM || 'noreply@lusty.com',
     fromName: process.env.EMAIL_FROM_NAME || 'Lusty',
-    frontendUrl: process.env.FRONTEND_URL || 'http://localhost:3000',
+    frontendUrl: FRONTEND_URL,
   },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',

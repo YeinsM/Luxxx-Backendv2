@@ -13,10 +13,14 @@ CREATE TABLE users (
   email VARCHAR(255) UNIQUE NOT NULL,
   password VARCHAR(255) NOT NULL,
   user_type user_type NOT NULL,
+  token_version INTEGER NOT NULL DEFAULT 0,
   is_active BOOLEAN DEFAULT true,
   email_verified BOOLEAN DEFAULT false,
   email_verification_token VARCHAR(255),
   email_verification_expires TIMESTAMP WITH TIME ZONE,
+  password_reset_token_hash VARCHAR(255),
+  password_reset_expires TIMESTAMP WITH TIME ZONE,
+  password_reset_used_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
@@ -65,6 +69,7 @@ CREATE INDEX idx_users_user_type ON users(user_type);
 CREATE INDEX idx_users_created_at ON users(created_at);
 CREATE INDEX idx_users_is_active ON users(is_active);
 CREATE INDEX idx_users_verification_token ON users(email_verification_token);
+CREATE INDEX idx_users_password_reset_token_hash ON users(password_reset_token_hash);
 
 -- Create a function to update the updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()

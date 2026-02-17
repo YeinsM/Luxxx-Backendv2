@@ -216,4 +216,71 @@ export class AuthController {
       next(error);
     }
   }
+
+  async forgotPassword(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestError(errors.array()[0].msg);
+      }
+
+      const result = await authService.requestPasswordReset(req.body);
+      const response: ApiResponse = {
+        success: true,
+        message: result.message,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async validateResetToken(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const { token } = req.query;
+
+      if (!token || typeof token !== 'string') {
+        throw new BadRequestError('Token requerido');
+      }
+
+      const result = await authService.validatePasswordResetToken(token);
+      const response: ApiResponse = {
+        success: true,
+        data: result,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async resetPassword(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestError(errors.array()[0].msg);
+      }
+
+      const result = await authService.resetPassword(req.body);
+      const response: ApiResponse = {
+        success: true,
+        message: result.message,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

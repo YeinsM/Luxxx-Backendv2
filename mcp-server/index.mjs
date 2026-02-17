@@ -26,8 +26,15 @@ import { execSync } from 'child_process';
 // ══════════════════════════════════════════════════════════════
 // Configuration
 // ══════════════════════════════════════════════════════════════
-const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:5000';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+// SWITCH: 0 = localhost, 1 = DevTunnels
+const USE_TUNNEL = 1;
+
+const BACKEND_URL = USE_TUNNEL
+  ? 'https://v9xj6vhl-5000.use2.devtunnels.ms'
+  : (process.env.BACKEND_URL || 'http://localhost:5000');
+const FRONTEND_URL = USE_TUNNEL
+  ? 'https://v9xj6vhl-3000.use2.devtunnels.ms'
+  : (process.env.FRONTEND_URL || 'http://localhost:3000');
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const PROJECT_ROOT = resolve(join(import.meta.dirname, '..'));
 const WORKSPACE_ROOT = resolve(join(PROJECT_ROOT, '..'));

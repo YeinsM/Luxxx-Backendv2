@@ -26,6 +26,7 @@ export const testEmail = async (req: Request, res: Response): Promise<void> => {
       city: 'Test City',
       age: 25,
       password: 'hashed',
+      tokenVersion: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
       isActive: true,

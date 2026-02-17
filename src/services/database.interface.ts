@@ -5,6 +5,7 @@ export interface DatabaseService {
   getUserByEmail(email: string): Promise<User | null>;
   getUserById(id: string): Promise<User | null>;
   getUserByVerificationToken(token: string): Promise<User | null>;
+  getUserByPasswordResetTokenHash(tokenHash: string): Promise<User | null>;
   updateUser(id: string, updates: Partial<User>): Promise<User | null>;
   deleteUser(id: string): Promise<boolean>;
 }
