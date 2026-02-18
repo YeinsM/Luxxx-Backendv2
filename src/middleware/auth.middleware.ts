@@ -29,6 +29,9 @@ export const authMiddleware = async (
     if (!user) {
       throw new UnauthorizedError('Invalid or expired token');
     }
+    if (!user.isActive) {
+      throw new UnauthorizedError('Account is inactive');
+    }
 
     if (decoded.tokenVersion !== user.tokenVersion) {
       throw new UnauthorizedError('Session expired, please login again');

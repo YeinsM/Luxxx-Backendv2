@@ -21,6 +21,8 @@ CREATE TABLE users (
   password_reset_token_hash VARCHAR(255),
   password_reset_expires TIMESTAMP WITH TIME ZONE,
   password_reset_used_at TIMESTAMP WITH TIME ZONE,
+  privacy_consent_accepted_at TIMESTAMP WITH TIME ZONE,
+  soft_deleted_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
@@ -68,6 +70,7 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_user_type ON users(user_type);
 CREATE INDEX idx_users_created_at ON users(created_at);
 CREATE INDEX idx_users_is_active ON users(is_active);
+CREATE INDEX idx_users_soft_deleted_at ON users(soft_deleted_at);
 CREATE INDEX idx_users_verification_token ON users(email_verification_token);
 CREATE INDEX idx_users_password_reset_token_hash ON users(password_reset_token_hash);
 
@@ -117,3 +120,5 @@ COMMENT ON TABLE users IS 'Stores all user types: escorts, members, agencies, an
 COMMENT ON COLUMN users.user_type IS 'Type of user account';
 COMMENT ON COLUMN users.email_verified IS 'Whether the user has verified their email address';
 COMMENT ON COLUMN users.is_active IS 'Whether the account is active';
+COMMENT ON COLUMN users.privacy_consent_accepted_at IS 'Timestamp when user accepted privacy policy';
+COMMENT ON COLUMN users.soft_deleted_at IS 'Soft delete timestamp; null means active account';

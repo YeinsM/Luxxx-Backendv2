@@ -144,6 +144,52 @@ export class AuthController {
     }
   }
 
+  async acceptPrivacyConsent(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) {
+        throw new BadRequestError('User ID not found');
+      }
+
+      const user = await authService.acceptPrivacyConsent(userId);
+      const response: ApiResponse = {
+        success: true,
+        message: 'Privacy consent accepted',
+        data: user,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async deleteMyAccount(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) {
+        throw new BadRequestError('User ID not found');
+      }
+
+      const result = await authService.softDeleteAccount(userId);
+      const response: ApiResponse = {
+        success: true,
+        message: 'Account soft-deleted successfully',
+        data: result,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async verifyEmail(
     req: Request,
     res: Response,

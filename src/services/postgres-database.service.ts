@@ -148,6 +148,13 @@ export class PostgresDatabaseService implements DatabaseService {
       updated_at: user.updatedAt.toISOString(),
     };
 
+    if (user.privacyConsentAcceptedAt !== undefined) {
+      base.privacy_consent_accepted_at = user.privacyConsentAcceptedAt?.toISOString() || null;
+    }
+    if (user.softDeletedAt !== undefined) {
+      base.soft_deleted_at = user.softDeletedAt?.toISOString() || null;
+    }
+
     switch (user.userType) {
       case UserType.ESCORT:
         base.name = (user as any).name;
@@ -192,6 +199,8 @@ export class PostgresDatabaseService implements DatabaseService {
       passwordResetTokenHash: 'password_reset_token_hash',
       passwordResetExpires: 'password_reset_expires',
       passwordResetUsedAt: 'password_reset_used_at',
+      privacyConsentAcceptedAt: 'privacy_consent_accepted_at',
+      softDeletedAt: 'soft_deleted_at',
       name: 'name',
       phone: 'phone',
       city: 'city',
@@ -235,6 +244,12 @@ export class PostgresDatabaseService implements DatabaseService {
         : undefined,
       passwordResetUsedAt: data.password_reset_used_at
         ? new Date(data.password_reset_used_at)
+        : undefined,
+      privacyConsentAcceptedAt: data.privacy_consent_accepted_at
+        ? new Date(data.privacy_consent_accepted_at)
+        : undefined,
+      softDeletedAt: data.soft_deleted_at
+        ? new Date(data.soft_deleted_at)
         : undefined,
       photos: [],
       videos: [],

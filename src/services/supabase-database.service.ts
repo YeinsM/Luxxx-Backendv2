@@ -116,6 +116,8 @@ export class SupabaseDatabaseService implements DatabaseService {
     if ('passwordResetUsedAt' in updates) serializedUpdates.password_reset_used_at = updates.passwordResetUsedAt?.toISOString() || null;
     if ('tokenVersion' in updates) serializedUpdates.token_version = updates.tokenVersion;
     if ('isActive' in updates) serializedUpdates.is_active = updates.isActive;
+    if ('privacyConsentAcceptedAt' in updates) serializedUpdates.privacy_consent_accepted_at = updates.privacyConsentAcceptedAt?.toISOString() || null;
+    if ('softDeletedAt' in updates) serializedUpdates.soft_deleted_at = updates.softDeletedAt?.toISOString() || null;
     if ('password' in updates) serializedUpdates.password = updates.password;
     
     // Add updated_at timestamp
@@ -143,7 +145,7 @@ export class SupabaseDatabaseService implements DatabaseService {
 
   // Helper methods to convert between camelCase and snake_case
   private serializeUser(user: User): any {
-    return {
+    const row: any = {
       id: user.id,
       email: user.email.toLowerCase(),
       password: user.password,
@@ -184,6 +186,15 @@ export class SupabaseDatabaseService implements DatabaseService {
         opening_hours: (user as any).openingHours,
       }),
     };
+
+    if (user.privacyConsentAcceptedAt !== undefined) {
+      row.privacy_consent_accepted_at = user.privacyConsentAcceptedAt?.toISOString() || null;
+    }
+    if (user.softDeletedAt !== undefined) {
+      row.soft_deleted_at = user.softDeletedAt?.toISOString() || null;
+    }
+
+    return row;
   }
 
   private deserializeUser(data: any): User {
@@ -202,6 +213,8 @@ export class SupabaseDatabaseService implements DatabaseService {
       passwordResetTokenHash: data.password_reset_token_hash || undefined,
       passwordResetExpires: data.password_reset_expires ? new Date(data.password_reset_expires) : undefined,
       passwordResetUsedAt: data.password_reset_used_at ? new Date(data.password_reset_used_at) : undefined,
+      privacyConsentAcceptedAt: data.privacy_consent_accepted_at ? new Date(data.privacy_consent_accepted_at) : undefined,
+      softDeletedAt: data.soft_deleted_at ? new Date(data.soft_deleted_at) : undefined,
     };
 
     switch (data.user_type) {

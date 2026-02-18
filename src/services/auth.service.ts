@@ -20,6 +20,7 @@ import {
 } from '../models/user.model';
 import { getDatabaseService } from './database.service';
 import { getEmailService } from './email.service';
+import { getAppDatabaseService } from './app-database.service';
 import { hashPassword, comparePassword } from '../utils/password.utils';
 import { generateToken } from '../utils/jwt.utils';
 import { BadRequestError, UnauthorizedError } from '../models/error.model';
@@ -226,6 +227,62 @@ export class AuthService {
       return null;
     }
     return this.removePassword(user);
+  }
+
+  async acceptPrivacyConsent(userId: string): Promise<Omit<User, 'password'>> {
+    const user = await this.db.getUserById(userId);
+    if (!user) {
+      throw new BadRequestError('User not found');
+    }
+
+    const updatedUser = await this.db.updateUser(userId, {
+      privacyConsentAcceptedAt: new Date(),
+    } as Partial<User>);
+
+    if (!updatedUser) {
+      throw new BadRequestError('No se pudo guardar la aceptación de privacidad');
+    }
+
+    return this.removePassword(updatedUser);
+  }
+
+  async softDeleteAccount(userId: string): Promise<{ success: boolean; softDeletedAt: string }> {
+    const user = await this.db.getUserById(userId);
+    if (!user) {
+      throw new BadRequestError('User not found');
+    }
+
+    if (!user.isActive) {
+      const alreadyDeletedAt = user.softDeletedAt ?? new Date();
+      return {
+        success: true,
+        softDeletedAt: alreadyDeletedAt.toISOString(),
+      };
+    }
+
+    const softDeletedAt = new Date();
+    const updatedUser = await this.db.updateUser(userId, {
+      isActive: false,
+      softDeletedAt,
+      tokenVersion: user.tokenVersion + 1,
+    } as Partial<User>);
+
+    if (!updatedUser) {
+      throw new BadRequestError('No se pudo terminar la cuenta');
+    }
+
+    // Soft-delete advertisement visibility so public profile is no longer shown.
+    try {
+      const appDb = getAppDatabaseService();
+      await appDb.softDeleteAdvertisementsByUserId(userId);
+    } catch (error) {
+      console.error('Failed to soft-delete advertisements for user:', userId, error);
+    }
+
+    return {
+      success: true,
+      softDeletedAt: softDeletedAt.toISOString(),
+    };
   }
 
   async verifyEmail(token: string): Promise<AuthResponse> {

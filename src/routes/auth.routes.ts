@@ -79,6 +79,28 @@ router.post(
 router.get('/me', authMiddleware, authController.getCurrentUser.bind(authController));
 
 /**
+ * @route   POST /api/auth/consent/privacy
+ * @desc    Persist privacy consent for current user
+ * @access  Private
+ */
+router.post(
+  '/consent/privacy',
+  authMiddleware,
+  authController.acceptPrivacyConsent.bind(authController)
+);
+
+/**
+ * @route   DELETE /api/auth/me
+ * @desc    Soft-delete current user account
+ * @access  Private
+ */
+router.delete(
+  '/me',
+  authMiddleware,
+  authController.deleteMyAccount.bind(authController)
+);
+
+/**
  * @route   GET /api/auth/verify-email
  * @desc    Verify user email with token
  * @access  Public

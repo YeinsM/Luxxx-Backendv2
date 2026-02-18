@@ -24,7 +24,9 @@ export interface BaseUser {
   createdAt: Date;
   updatedAt: Date;
   isActive: boolean;
+  softDeletedAt?: Date;
   emailVerified: boolean;
+  privacyConsentAcceptedAt?: Date;
   emailVerificationToken?: string;
   emailVerificationExpires?: Date;
   passwordResetTokenHash?: string;

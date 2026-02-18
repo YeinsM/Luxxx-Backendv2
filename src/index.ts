@@ -42,6 +42,8 @@ app.get('/', (_req: Request, res: Response) => {
         registerClub: 'POST /api/auth/register/club',
         login: 'POST /api/auth/login',
         me: 'GET /api/auth/me',
+        acceptPrivacyConsent: 'POST /api/auth/consent/privacy',
+        deleteMyAccount: 'DELETE /api/auth/me',
       },
     },
   });
@@ -71,6 +73,8 @@ app.listen(PORT, () => {
   console.log(`   - Register Club: POST http://localhost:${PORT}/api/auth/register/club`);
   console.log(`   - Login: POST http://localhost:${PORT}/api/auth/login`);
   console.log(`   - Current User: GET http://localhost:${PORT}/api/auth/me`);
+  console.log(`   - Accept Privacy Consent: POST http://localhost:${PORT}/api/auth/consent/privacy`);
+  console.log(`   - Soft Delete My Account: DELETE http://localhost:${PORT}/api/auth/me`);
   console.log('');
   console.log('Press Ctrl+C to stop the server');
   console.log('');

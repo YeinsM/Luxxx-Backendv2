@@ -162,6 +162,24 @@ export class AppDatabaseService {
     return !error;
   }
 
+  async softDeleteAdvertisementsByUserId(userId: string): Promise<number> {
+    const { data, error } = await this.client
+      .from('advertisements')
+      .update({
+        is_online: false,
+        status: 'deleted',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('user_id', userId)
+      .select('id');
+
+    if (error) {
+      throw new InternalServerError(`Failed to soft-delete advertisements: ${error.message}`);
+    }
+
+    return (data || []).length;
+  }
+
   async verifyAdvertisement(id: string, userId: string, idType: string, idNumber: string): Promise<Advertisement> {
     const { data, error } = await this.client
       .from('advertisements')
