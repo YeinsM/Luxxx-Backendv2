@@ -61,6 +61,13 @@ export interface Advertisement {
   // Contact
   phone?: string;
   phoneVerified?: boolean;
+  contactByPhone?: boolean;
+  contactByWhatsApp?: boolean;
+  contactBySignal?: boolean;
+  contactByTelegram?: boolean;
+  contactBySMS?: boolean;
+  contactByKinky?: boolean;
+  kinkyEmailFrequency?: string;
   websiteUrl?: string;
   
   // Promo
@@ -232,6 +239,13 @@ export interface CreateAdvertisementDto {
   meetingWith?: string;
   workingHours?: Record<string, string>;
   phone?: string;
+  contactByPhone?: boolean;
+  contactByWhatsApp?: boolean;
+  contactBySignal?: boolean;
+  contactByTelegram?: boolean;
+  contactBySMS?: boolean;
+  contactByKinky?: boolean;
+  kinkyEmailFrequency?: string;
   websiteUrl?: string;
   promoSticker?: string;
   budget?: number;

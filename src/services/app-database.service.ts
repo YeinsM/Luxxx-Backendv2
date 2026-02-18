@@ -765,6 +765,13 @@ export class AppDatabaseService {
     if (ad.workingHours !== undefined) row.working_hours = ad.workingHours;
     if (ad.phone !== undefined) row.phone = ad.phone;
     if (ad.phoneVerified !== undefined) row.phone_verified = ad.phoneVerified;
+    if (ad.contactByPhone !== undefined) row.contact_by_phone = ad.contactByPhone;
+    if (ad.contactByWhatsApp !== undefined) row.contact_by_whatsapp = ad.contactByWhatsApp;
+    if (ad.contactBySignal !== undefined) row.contact_by_signal = ad.contactBySignal;
+    if (ad.contactByTelegram !== undefined) row.contact_by_telegram = ad.contactByTelegram;
+    if (ad.contactBySMS !== undefined) row.contact_by_sms = ad.contactBySMS;
+    if (ad.contactByKinky !== undefined) row.contact_by_kinky = ad.contactByKinky;
+    if (ad.kinkyEmailFrequency !== undefined) row.kinky_email_frequency = ad.kinkyEmailFrequency;
     if (ad.websiteUrl !== undefined) row.website_url = ad.websiteUrl;
     if (ad.promoSticker !== undefined) row.promo_sticker = ad.promoSticker;
     if (ad.budget !== undefined) row.budget = ad.budget;
@@ -818,6 +825,13 @@ export class AppDatabaseService {
       workingHours: data.working_hours,
       phone: data.phone,
       phoneVerified: data.phone_verified,
+      contactByPhone: data.contact_by_phone ?? true,
+      contactByWhatsApp: data.contact_by_whatsapp ?? true,
+      contactBySignal: data.contact_by_signal ?? true,
+      contactByTelegram: data.contact_by_telegram ?? true,
+      contactBySMS: data.contact_by_sms ?? true,
+      contactByKinky: data.contact_by_kinky ?? false,
+      kinkyEmailFrequency: data.kinky_email_frequency || 'every',
       websiteUrl: data.website_url,
       promotedAt: data.promoted_at ? new Date(data.promoted_at) : undefined,
       promoSticker: data.promo_sticker,
