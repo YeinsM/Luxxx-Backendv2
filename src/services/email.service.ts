@@ -1,124 +1,170 @@
-import nodemailer, { Transporter } from 'nodemailer';
+// ══════════════════════════════════════════════════════════════
+// OPCIÓN 1: RESEND API (ACTUAL - EN USO) ✅
+// ══════════════════════════════════════════════════════════════
+import { Resend } from 'resend';
 import { config } from '../config';
 import { User, UserType } from '../models/user.model';
 
 /**
- * Email Service for sending notifications
+ * Email Service using Resend API for sending notifications
+ * Resend works better in cloud platforms like Render (no SMTP port blocks)
  */
 export class EmailService {
-  private transporter: Transporter | null = null;
+  private resend: Resend | null = null;
 
   constructor() {
-    this.initializeTransporter();
+    this.initializeResend();
   }
 
-  private initializeTransporter(): void {
-    if (!config.email.host || !config.email.user || !config.email.password) {
-      console.log('⚠️  Email service not configured - emails will not be sent');
-      console.log(`   Host: ${config.email.host || 'NOT SET'}`);
-      console.log(`   User: ${config.email.user || 'NOT SET'}`);
-      console.log(`   Password: ${config.email.password ? '***SET***' : 'NOT SET'}`);
+  private initializeResend(): void {
+    if (!config.email.resendApiKey) {
+      console.log('⚠️  Resend Email service not configured - emails will not be sent');
+      console.log(`   RESEND_API_KEY: ${config.email.resendApiKey ? '***SET***' : 'NOT SET'}`);
       return;
     }
 
     try {
-      // Configuración específica para Zoho SMTP
-      this.transporter = nodemailer.createTransport({
-        host: config.email.host,
-        port: config.email.port,
-        secure: config.email.secure, // false para puerto 587
-        requireTLS: true, // Forzar STARTTLS para Zoho
-        auth: {
-          user: config.email.user,
-          pass: config.email.password,
-        },
-        tls: {
-          // Opciones TLS para Zoho
-          ciphers: 'SSLv3',
-          rejectUnauthorized: false, // Para desarrollo, cambiar a true en producción
-        },
-        debug: true, // Activar debug para ver logs detallados
-        logger: true, // Activar logger
-      });
-
-      console.log('✅ Email service initialized');
-      console.log(`   SMTP: ${config.email.host}:${config.email.port} (secure: ${config.email.secure}, requireTLS: true)`);
-      console.log(`   User: ${config.email.user}`);
+      this.resend = new Resend(config.email.resendApiKey);
+      console.log('✅ Email service initialized (Resend API)');
       console.log(`   From: ${config.email.fromEmail}`);
-
-      // Verificar conexión SMTP
-      this.transporter.verify((error, success) => {
-        if (error) {
-          console.error('❌ SMTP connection verification failed:', error);
-        } else {
-          console.log('✅ SMTP server is ready to send emails');
-        }
-      });
     } catch (error) {
-      console.error('❌ Failed to initialize email service:', error);
+      console.error('❌ Failed to initialize Resend email service:', error);
     }
   }
+
+  // ══════════════════════════════════════════════════════════════
+  // OPCIÓN 2: NODEMAILER SMTP (COMENTADO - PARA USO FUTURO)
+  // ══════════════════════════════════════════════════════════════
+  // import nodemailer, { Transporter } from 'nodemailer';
+  // private transporter: Transporter | null = null;
+  //
+  // private initializeTransporter(): void {
+  //   if (!config.email.host || !config.email.user || !config.email.password) {
+  //     console.log('⚠️  Email service not configured - emails will not be sent');
+  //     console.log(`   Host: ${config.email.host || 'NOT SET'}`);
+  //     console.log(`   User: ${config.email.user || 'NOT SET'}`);
+  //     console.log(`   Password: ${config.email.password ? '***SET***' : 'NOT SET'}`);
+  //     return;
+  //   }
+  //
+  //   try {
+  //     this.transporter = nodemailer.createTransport({
+  //       host: config.email.host,
+  //       port: config.email.port,
+  //       secure: config.email.secure,
+  //       requireTLS: true,
+  //       auth: {
+  //         user: config.email.user,
+  //         pass: config.email.password,
+  //       },
+  //       tls: {
+  //         ciphers: 'SSLv3',
+  //         rejectUnauthorized: false,
+  //       },
+  //       debug: true,
+  //       logger: true,
+  //     });
+  //
+  //     console.log('✅ Email service initialized (SMTP)');
+  //     console.log(`   SMTP: ${config.email.host}:${config.email.port}`);
+  //     console.log(`   User: ${config.email.user}`);
+  //
+  //     if (config.nodeEnv !== 'production') {
+  //       this.transporter.verify((error, success) => {
+  //         if (error) {
+  //           console.warn('⚠️  SMTP connection verification failed:', error.message);
+  //         } else {
+  //           console.log('✅ SMTP server is ready to send emails');
+  //         }
+  //       });
+  //     }
+  //   } catch (error) {
+  //     console.error('❌ Failed to initialize email service:', error);
+  //   }
+  // }
+  // ══════════════════════════════════════════════════════════════
 
   /**
    * Send welcome email to new user
    */
   async sendWelcomeEmail(user: User): Promise<boolean> {
-    if (!this.transporter) {
-      console.log('❌ Email not sent - transporter not configured');
+    if (!this.resend) {
+      console.log('❌ Email not sent - Resend not configured');
       return false;
     }
 
     try {
       const subject = this.getWelcomeSubject(user.userType);
       const html = this.getWelcomeTemplate(user);
-
-      console.log(`📧 Sending welcome email to ${user.email}...`);
-      console.log(`   Host: ${config.email.host}:${config.email.port}`);
-      console.log(`   From: ${config.email.fromEmail}`);
-
-      // Obtener versión de texto plano del email
       const text = this.getWelcomeTextVersion(user);
 
-      const info = await this.transporter.sendMail({
-        from: `"${config.email.fromName}" <${config.email.fromEmail}>`,
-        to: user.email,
+      console.log(`📧 Sending welcome email to ${user.email}...`);
+
+      const { data, error } = await this.resend.emails.send({
+        from: `${config.email.fromName} <${config.email.fromEmail}>`,
+        to: [user.email],
         subject,
-        text, // Versión de texto plano (importante para evitar spam)
         html,
-        // Headers adicionales para evitar spam
-        headers: {
-          'X-Priority': '3',
-          'X-Mailer': 'Lusty Platform',
-          'List-Unsubscribe': `<mailto:unsubscribe@techbrains.com.do>`,
-        },
+        text,
       });
 
+      if (error) {
+        console.error('❌ Failed to send welcome email:', error);
+        return false;
+      }
+
       console.log(`✅ Welcome email sent successfully to ${user.email}`);
-      console.log(`   Message ID: ${info.messageId}`);
-      console.log(`   Response: ${info.response}`);
-      if (info.accepted && info.accepted.length > 0) {
-        console.log(`   Accepted: ${info.accepted.join(', ')}`);
-      }
-      if (info.rejected && info.rejected.length > 0) {
-        console.log(`   ⚠️  Rejected: ${info.rejected.join(', ')}`);
-      }
+      console.log(`   Message ID: ${data?.id}`);
       return true;
     } catch (error: any) {
-      console.error('❌ Failed to send welcome email:');
-      console.error('   Error:', error.message);
-      if (error.code) console.error('   Code:', error.code);
-      if (error.response) console.error('   Response:', error.response);
-      if (error.responseCode) console.error('   Response Code:', error.responseCode);
+      console.error('❌ Failed to send welcome email:', error.message);
       return false;
     }
+
+    // ══════════════════════════════════════════════════════════════
+    // SMTP VERSION (COMENTADO - PARA USO FUTURO)
+    // ══════════════════════════════════════════════════════════════
+    // if (!this.transporter) {
+    //   console.log('❌ Email not sent - transporter not configured');
+    //   return false;
+    // }
+    //
+    // try {
+    //   const subject = this.getWelcomeSubject(user.userType);
+    //   const html = this.getWelcomeTemplate(user);
+    //   const text = this.getWelcomeTextVersion(user);
+    //
+    //   console.log(`📧 Sending welcome email to ${user.email}...`);
+    //
+    //   const info = await this.transporter.sendMail({
+    //     from: `"${config.email.fromName}" <${config.email.fromEmail}>`,
+    //     to: user.email,
+    //     subject,
+    //     text,
+    //     html,
+    //     headers: {
+    //       'X-Priority': '3',
+    //       'X-Mailer': 'Lusty Platform',
+    //       'List-Unsubscribe': `<mailto:unsubscribe@techbrains.com.do>`,
+    //     },
+    //   });
+    //
+    //   console.log(`✅ Welcome email sent successfully to ${user.email}`);
+    //   console.log(`   Message ID: ${info.messageId}`);
+    //   return true;
+    // } catch (error: any) {
+    //   console.error('❌ Failed to send welcome email:', error.message);
+    //   return false;
+    // }
+    // ══════════════════════════════════════════════════════════════
   }
 
   /**
    * Send email verification
    */
   async sendVerificationEmail(user: User, verificationToken: string): Promise<boolean> {
-    if (!this.transporter) {
-      console.log('Email not sent - transporter not configured');
+    if (!this.resend) {
+      console.log('❌ Email not sent - Resend not configured');
       return false;
     }
 
@@ -186,12 +232,17 @@ export class EmailService {
         </html>
       `;
 
-      await this.transporter.sendMail({
-        from: `"${config.email.fromName}" <${config.email.fromEmail}>`,
-        to: user.email,
+      const { data, error } = await this.resend.emails.send({
+        from: `${config.email.fromName} <${config.email.fromEmail}>`,
+        to: [user.email],
         subject: 'Verifica tu email - Lusty',
         html,
       });
+
+      if (error) {
+        console.error('❌ Failed to send verification email:', error);
+        return false;
+      }
 
       console.log(`✅ Verification email sent to ${user.email}`);
       return true;
@@ -202,8 +253,8 @@ export class EmailService {
   }
 
   async sendPasswordResetEmail(user: User, resetToken: string): Promise<boolean> {
-    if (!this.transporter) {
-      console.log('Email not sent - transporter not configured');
+    if (!this.resend) {
+      console.log('❌ Email not sent - Resend not configured');
       return false;
     }
 
@@ -264,12 +315,17 @@ export class EmailService {
         </html>
       `;
 
-      await this.transporter.sendMail({
-        from: `"${config.email.fromName}" <${config.email.fromEmail}>`,
-        to: user.email,
+      const { data, error } = await this.resend.emails.send({
+        from: `${config.email.fromName} <${config.email.fromEmail}>`,
+        to: [user.email],
         subject: 'Restablecer contraseña - Lusty',
         html,
       });
+
+      if (error) {
+        console.error('❌ Failed to send password reset email:', error);
+        return false;
+      }
 
       console.log(`✅ Password reset email sent to ${user.email}`);
       return true;

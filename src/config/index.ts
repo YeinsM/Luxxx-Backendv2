@@ -35,11 +35,17 @@ export const config = {
     url: process.env.DATABASE_URL || '',
   },
   email: {
+    // Resend API (Actual - en uso)
+    resendApiKey: process.env.RESEND_API_KEY || '',
+    
+    // SMTP Config (comentado - para uso futuro)
     host: process.env.EMAIL_HOST || '',
     port: parseInt(process.env.EMAIL_PORT || '587'),
     secure: process.env.EMAIL_SECURE === 'true',
     user: process.env.EMAIL_USER || '',
     password: process.env.EMAIL_PASSWORD || '',
+    
+    // Configuración general
     fromEmail: process.env.EMAIL_FROM || 'noreply@lusty.com',
     fromName: process.env.EMAIL_FROM_NAME || 'Lusty',
     frontendUrl: FRONTEND_URL,
