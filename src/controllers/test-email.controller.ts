@@ -25,6 +25,7 @@ export const testEmail = async (req: Request, res: Response): Promise<void> => {
       phone: '+1234567890',
       city: 'Test City',
       age: 25,
+      dateOfBirth: '2000-01-01',
       password: 'hashed',
       tokenVersion: 0,
       createdAt: new Date(),
