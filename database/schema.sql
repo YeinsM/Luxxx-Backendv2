@@ -49,7 +49,7 @@ CREATE TABLE users (
   
   -- Constraints
   CONSTRAINT valid_email CHECK (email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'),
-  CONSTRAINT valid_age CHECK (age IS NULL OR (age >= 18 AND age <= 99)),
+  CONSTRAINT valid_age CHECK (age IS NULL OR (age >= 21 AND age <= 99)),
   
   -- Type-specific field requirements
   CONSTRAINT escort_fields CHECK (

@@ -27,7 +27,7 @@ export const registerEscortValidation = [
       const birth = new Date(value);
       const now = new Date();
       const age = Math.floor((now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-      if (age < 18) throw new Error('You must be at least 18 years old');
+      if (age < 21) throw new Error('Escort profiles require a minimum age of 21');
       if (age > 99) throw new Error('Invalid date of birth');
       return true;
     }),
@@ -136,7 +136,7 @@ export const createAdvertisementValidation = [
     .isLength({ min: 2, max: 100 })
     .withMessage('Name must be between 2 and 100 characters'),
   body('category').optional().trim(),
-  body('age').optional().isInt({ min: 18, max: 99 }).withMessage('Age must be between 18 and 99'),
+  body('age').optional().isInt({ min: 21, max: 99 }).withMessage('Escort age must be 21 or older'),
 ];
 
 export const createReviewValidation = [

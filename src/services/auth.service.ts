@@ -36,6 +36,7 @@ export class AuthService {
     const birth = new Date(dto.dateOfBirth);
     const now = new Date();
     const computedAge = Math.floor((now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    if (computedAge < 21) throw new Error('Escort profiles require a minimum age of 21');
 
     const hashedPassword = await hashPassword(dto.password);
     const verificationToken = uuidv4();
