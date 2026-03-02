@@ -166,6 +166,7 @@ export class SupabaseDatabaseService implements DatabaseService {
         phone: (user as any).phone,
         city: (user as any).city,
         age: (user as any).age,
+        date_of_birth: (user as any).dateOfBirth || null,
       }),
       ...(user.userType === UserType.MEMBER && {
         username: (user as any).username,
@@ -225,6 +226,7 @@ export class SupabaseDatabaseService implements DatabaseService {
           phone: data.phone,
           city: data.city,
           age: data.age,
+          dateOfBirth: data.date_of_birth || undefined,
         } as User;
       case UserType.MEMBER:
         return {

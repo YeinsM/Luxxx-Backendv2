@@ -42,6 +42,7 @@ export interface EscortUser extends BaseUser {
   phone: string;
   city: string;
   age: number;
+  dateOfBirth: string; // ISO date string YYYY-MM-DD
 }
 
 export interface MemberUser extends BaseUser {
@@ -77,7 +78,7 @@ export interface RegisterEscortDto {
   password: string;
   phone: string;
   city: string;
-  age: number;
+  dateOfBirth: string; // ISO date string YYYY-MM-DD — age is computed from this
 }
 
 export interface RegisterMemberDto {

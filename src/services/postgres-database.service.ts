@@ -161,6 +161,7 @@ export class PostgresDatabaseService implements DatabaseService {
         base.phone = (user as any).phone;
         base.city = (user as any).city;
         base.age = (user as any).age;
+        base.date_of_birth = (user as any).dateOfBirth || null;
         break;
       case UserType.MEMBER:
         base.username = (user as any).username;
@@ -205,6 +206,7 @@ export class PostgresDatabaseService implements DatabaseService {
       phone: 'phone',
       city: 'city',
       age: 'age',
+      dateOfBirth: 'date_of_birth',
       username: 'username',
       agencyName: 'agency_name',
       clubName: 'club_name',
@@ -263,6 +265,7 @@ export class PostgresDatabaseService implements DatabaseService {
           phone: data.phone,
           city: data.city,
           age: data.age,
+          dateOfBirth: data.date_of_birth || undefined,
         } as User;
       case UserType.MEMBER:
         return {

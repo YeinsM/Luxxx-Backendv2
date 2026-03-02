@@ -18,9 +18,19 @@ export const registerEscortValidation = [
     .matches(/^[\d\s\-\+\(\)]+$/)
     .withMessage('Invalid phone number'),
   body('city').trim().notEmpty().withMessage('City is required'),
-  body('age')
-    .isInt({ min: 18, max: 99 })
-    .withMessage('Age must be between 18 and 99'),
+  body('dateOfBirth')
+    .notEmpty()
+    .withMessage('Date of birth is required')
+    .isISO8601()
+    .withMessage('Date of birth must be a valid date (YYYY-MM-DD)')
+    .custom((value: string) => {
+      const birth = new Date(value);
+      const now = new Date();
+      const age = Math.floor((now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      if (age < 18) throw new Error('You must be at least 18 years old');
+      if (age > 99) throw new Error('Invalid date of birth');
+      return true;
+    }),
 ];
 
 export const registerMemberValidation = [

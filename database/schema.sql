@@ -31,6 +31,7 @@ CREATE TABLE users (
   phone VARCHAR(50),
   city VARCHAR(100),
   age INTEGER,
+  date_of_birth DATE,
   
   -- Member specific fields
   username VARCHAR(50),
@@ -52,7 +53,7 @@ CREATE TABLE users (
   
   -- Type-specific field requirements
   CONSTRAINT escort_fields CHECK (
-    user_type != 'escort' OR (name IS NOT NULL AND phone IS NOT NULL AND city IS NOT NULL AND age IS NOT NULL)
+    user_type != 'escort' OR (name IS NOT NULL AND phone IS NOT NULL AND city IS NOT NULL AND date_of_birth IS NOT NULL)
   ),
   CONSTRAINT member_fields CHECK (
     user_type != 'member' OR (username IS NOT NULL AND city IS NOT NULL)

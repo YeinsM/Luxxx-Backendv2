@@ -32,6 +32,11 @@ export class AuthService {
   async registerEscort(dto: RegisterEscortDto): Promise<RegistrationResponse> {
     this.validatePassword(dto.password);
 
+    // Compute age from date of birth
+    const birth = new Date(dto.dateOfBirth);
+    const now = new Date();
+    const computedAge = Math.floor((now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+
     const hashedPassword = await hashPassword(dto.password);
     const verificationToken = uuidv4();
     const verificationExpires = new Date();
@@ -45,7 +50,8 @@ export class AuthService {
       name: dto.name,
       phone: dto.phone,
       city: dto.city,
-      age: dto.age,
+      age: computedAge,
+      dateOfBirth: dto.dateOfBirth,
       createdAt: new Date(),
       updatedAt: new Date(),
       tokenVersion: 0,
