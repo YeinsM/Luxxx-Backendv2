@@ -154,7 +154,7 @@ export class AuthController {
     }
   }
 
-
+  async getCurrentUser(
     req: Request,
     res: Response,
     next: NextFunction

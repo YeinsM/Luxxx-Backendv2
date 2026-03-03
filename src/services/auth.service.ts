@@ -293,7 +293,7 @@ export class AuthService {
     return this.generateAuthResponse(user);
   }
 
-(userId: string): Promise<Omit<User, 'password'> | null> {
+  async getUserById(userId: string): Promise<Omit<User, 'password'> | null> {
     const user = await this.db.getUserById(userId);
     if (!user) {
       return null;

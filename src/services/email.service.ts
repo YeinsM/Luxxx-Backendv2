@@ -712,7 +712,6 @@ Este es un correo automático, por favor no respondas a este mensaje.
       </html>
     `;
   }
-}
 
   /**
    * Send login OTP (2FA) code email
