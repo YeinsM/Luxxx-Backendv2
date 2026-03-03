@@ -118,7 +118,43 @@ export class AuthController {
     }
   }
 
-  async getCurrentUser(
+  async sendLoginOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        throw new BadRequestError(errors.array()[0].msg);
+      }
+
+      const result = await authService.sendLoginOtp(req.body);
+      const response: ApiResponse = {
+        success: true,
+        message: result.message,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async verifyLoginOtp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      if (!req.body.email || !req.body.otp) {
+        throw new BadRequestError('Email y código son requeridos');
+      }
+
+      const result = await authService.verifyLoginOtp(req.body);
+      const response: ApiResponse = {
+        success: true,
+        message: 'Login exitoso',
+        data: result,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+
     req: Request,
     res: Response,
     next: NextFunction

@@ -72,6 +72,27 @@ router.post(
 );
 
 /**
+ * @route   POST /api/auth/login/send-otp
+ * @desc    Step 1 of 2FA login – validate credentials and send 7-digit OTP to email
+ * @access  Public
+ */
+router.post(
+  '/login/send-otp',
+  loginValidation,
+  authController.sendLoginOtp.bind(authController)
+);
+
+/**
+ * @route   POST /api/auth/login/verify-otp
+ * @desc    Step 2 of 2FA login – verify OTP and return auth token
+ * @access  Public
+ */
+router.post(
+  '/login/verify-otp',
+  authController.verifyLoginOtp.bind(authController)
+);
+
+/**
  * @route   GET /api/auth/me
  * @desc    Get current user
  * @access  Private

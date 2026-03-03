@@ -29,6 +29,10 @@ export class AuthService {
   private db = getDatabaseService();
   private emailService = getEmailService();
 
+  // ── In-memory OTP store ───────────────────────────────────────────────
+  // key = email (lowercase), value = { otp, expiresAt }
+  private static loginOtpStore = new Map<string, { otp: string; expiresAt: Date }>();
+
   async registerEscort(dto: RegisterEscortDto): Promise<RegistrationResponse> {
     this.validatePassword(dto.password);
 
@@ -228,7 +232,68 @@ export class AuthService {
     return this.generateAuthResponse(user);
   }
 
-  async getUserById(userId: string): Promise<Omit<User, 'password'> | null> {
+  /**
+   * Step 1 of 2FA login: validate credentials, generate 7-digit OTP, send to email.
+   */
+  async sendLoginOtp(dto: LoginDto): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = dto.email.toLowerCase();
+    const user = await this.db.getUserByEmail(normalizedEmail);
+
+    if (!user) throw new UnauthorizedError('El email no existe en nuestra base de datos');
+
+    const isPasswordValid = await comparePassword(dto.password, user.password);
+    if (!isPasswordValid) throw new UnauthorizedError('La contraseña es incorrecta');
+
+    if (!user.isActive) throw new UnauthorizedError('La cuenta está inactiva');
+    if (!user.emailVerified) throw new UnauthorizedError('Por favor verifica tu email antes de iniciar sesión');
+
+    // Generate a 7-digit OTP
+    const otp = String(Math.floor(1000000 + Math.random() * 9000000));
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    AuthService.loginOtpStore.set(normalizedEmail, { otp, expiresAt });
+
+    // Send OTP email (non-blocking)
+    this.emailService.sendLoginOtpEmail(normalizedEmail, otp).catch((err) => {
+      console.error('Failed to send OTP email:', err);
+    });
+
+    return {
+      success: true,
+      message: `Código de verificación enviado a ${normalizedEmail}`,
+    };
+  }
+
+  /**
+   * Step 2 of 2FA login: validate OTP, return full auth response.
+   */
+  async verifyLoginOtp(dto: { email: string; otp: string }): Promise<AuthResponse> {
+    const normalizedEmail = dto.email.toLowerCase();
+    const record = AuthService.loginOtpStore.get(normalizedEmail);
+
+    if (!record) {
+      throw new UnauthorizedError('No se encontró un código activo. Solicita uno nuevo.');
+    }
+
+    if (new Date() > record.expiresAt) {
+      AuthService.loginOtpStore.delete(normalizedEmail);
+      throw new UnauthorizedError('El código ha expirado. Solicita uno nuevo.');
+    }
+
+    if (record.otp !== dto.otp.trim()) {
+      throw new UnauthorizedError('Código incorrecto. Verifica e intenta de nuevo.');
+    }
+
+    // OTP is valid – clean up and return auth token
+    AuthService.loginOtpStore.delete(normalizedEmail);
+
+    const user = await this.db.getUserByEmail(normalizedEmail);
+    if (!user) throw new UnauthorizedError('Usuario no encontrado');
+
+    return this.generateAuthResponse(user);
+  }
+
+(userId: string): Promise<Omit<User, 'password'> | null> {
     const user = await this.db.getUserById(userId);
     if (!user) {
       return null;

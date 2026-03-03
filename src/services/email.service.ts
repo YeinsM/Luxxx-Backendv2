@@ -714,6 +714,86 @@ Este es un correo automático, por favor no respondas a este mensaje.
   }
 }
 
+  /**
+   * Send login OTP (2FA) code email
+   */
+  async sendLoginOtpEmail(toEmail: string, otpCode: string): Promise<boolean> {
+    if (!this.resend) {
+      console.log('❌ OTP Email not sent - Resend not configured');
+      return false;
+    }
+
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        </head>
+        <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#f4f4f4;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:20px;">
+            <tr>
+              <td align="center">
+                <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+                  <tr>
+                    <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 20px;text-align:center;">
+                      <h1 style="color:#ffffff;margin:0;font-size:26px;">Código de Verificación</h1>
+                      <p style="color:#e0d7ff;margin:10px 0 0 0;font-size:14px;">Lusty Platform</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:40px 30px;text-align:center;">
+                      <p style="color:#333333;font-size:16px;line-height:24px;margin:0 0 20px 0;">
+                        Ingresa el siguiente código para completar tu inicio de sesión:
+                      </p>
+                      <div style="background:linear-gradient(135deg,#f3f0ff 0%,#fce7f3 100%);border:2px solid #a78bfa;border-radius:12px;padding:24px 40px;display:inline-block;margin:10px 0 20px 0;">
+                        <span style="font-size:42px;font-weight:900;letter-spacing:10px;color:#6d28d9;font-family:'Courier New',monospace;">${otpCode}</span>
+                      </div>
+                      <p style="color:#6b7280;font-size:14px;margin:16px 0 0 0;">
+                        Este código expira en <strong>10 minutos</strong>.
+                      </p>
+                      <p style="color:#9ca3af;font-size:13px;margin:10px 0 0 0;">
+                        Si no solicitaste este código, ignora este correo.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="background-color:#f8f9fa;padding:20px 30px;text-align:center;border-top:1px solid #e9ecef;">
+                      <p style="color:#6c757d;font-size:12px;margin:0;">
+                        © ${new Date().getFullYear()} Lusty. Todos los derechos reservados.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      const { data, error } = await this.resend.emails.send({
+        from: `${config.email.fromName} <${config.email.fromEmail}>`,
+        to: [toEmail],
+        subject: `Tu código de acceso: ${otpCode} - Lusty`,
+        html,
+      });
+
+      if (error) {
+        console.error('❌ Failed to send OTP email:', error);
+        return false;
+      }
+
+      console.log(`✅ OTP email sent to ${toEmail} (ID: ${data?.id})`);
+      return true;
+    } catch (error) {
+      console.error('❌ Failed to send OTP email:', error);
+      return false;
+    }
+  }
+}
+
 // Singleton instance
 let emailServiceInstance: EmailService | null = null;
 
