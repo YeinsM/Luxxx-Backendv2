@@ -18,7 +18,7 @@ export const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   jwt: {
     secret: process.env.JWT_SECRET || 'fallback-secret-key',
-    expiresIn: (process.env.JWT_EXPIRES_IN || '7d') as string,
+    expiresIn: (process.env.JWT_EXPIRES_IN || '24h') as string,
   },
   supabase: {
     url: process.env.SUPABASE_URL || '',
