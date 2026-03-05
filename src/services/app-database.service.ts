@@ -749,6 +749,7 @@ export class AppDatabaseService {
     if (ad.height !== undefined) row.height = ad.height;
     if (ad.weight !== undefined) row.weight = ad.weight;
     if (ad.eyes !== undefined) row.eyes = ad.eyes;
+    if (ad.bodyType !== undefined) row.body_type = ad.bodyType;
     if (ad.hairColor !== undefined) row.hair_color = ad.hairColor;
     if (ad.hairLength !== undefined) row.hair_length = ad.hairLength;
     if (ad.pubicHair !== undefined) row.pubic_hair = ad.pubicHair;
@@ -809,6 +810,7 @@ export class AppDatabaseService {
       height: data.height,
       weight: data.weight,
       eyes: data.eyes,
+      bodyType: data.body_type,
       hairColor: data.hair_color,
       hairLength: data.hair_length,
       pubicHair: data.pubic_hair,

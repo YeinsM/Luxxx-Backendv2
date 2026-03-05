@@ -34,6 +34,7 @@ export interface Advertisement {
   languages?: string[];
   
   // Physical attributes
+  bodyType?: string;
   height?: string;
   weight?: string;
   eyes?: string;
@@ -221,6 +222,7 @@ export interface CreateAdvertisementDto {
   ethnicity?: string;
   nationality?: string;
   languages?: string[];
+  bodyType?: string;
   height?: string;
   weight?: string;
   eyes?: string;
