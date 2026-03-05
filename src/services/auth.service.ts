@@ -327,7 +327,33 @@ export class AuthService {
       throw new BadRequestError('User not found');
     }
 
-    const updatedUser = await this.db.updateUser(userId, updates as Partial<User>);
+    const normalizedUpdates: Partial<User> = { ...updates } as Partial<User>;
+
+    // Keep age in sync when dateOfBirth changes (legacy ad flow still uses age).
+    if (updates.dateOfBirth !== undefined) {
+      const birth = new Date(updates.dateOfBirth);
+      if (Number.isNaN(birth.getTime())) {
+        throw new BadRequestError('Date of birth must be a valid date (YYYY-MM-DD)');
+      }
+
+      const now = new Date();
+      const computedAge = Math.floor(
+        (now.getTime() - birth.getTime()) / (365.25 * 24 * 60 * 60 * 1000)
+      );
+
+      if (computedAge < 21) {
+        throw new BadRequestError('Escort profiles require a minimum age of 21');
+      }
+      if (computedAge > 99) {
+        throw new BadRequestError('Invalid date of birth');
+      }
+
+      if (user.userType === UserType.ESCORT) {
+        (normalizedUpdates as EscortUser).age = computedAge;
+      }
+    }
+
+    const updatedUser = await this.db.updateUser(userId, normalizedUpdates);
 
     if (!updatedUser) {
       throw new BadRequestError('No se pudo actualizar el perfil');
