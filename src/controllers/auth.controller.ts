@@ -180,6 +180,32 @@ export class AuthController {
     }
   }
 
+  async updateProfile(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) {
+        throw new BadRequestError('User ID not found');
+      }
+
+      const { dateOfBirth, name, phone, city } = req.body;
+      const updates: Record<string, unknown> = {};
+      if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth;
+      if (name !== undefined) updates.name = name;
+      if (phone !== undefined) updates.phone = phone;
+      if (city !== undefined) updates.city = city;
+
+      const user = await authService.updateProfile(userId, updates as any);
+      const response: ApiResponse = { success: true, data: user };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async acceptPrivacyConsent(
     req: Request,
     res: Response,

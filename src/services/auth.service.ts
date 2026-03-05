@@ -318,6 +318,24 @@ export class AuthService {
     return this.removePassword(updatedUser);
   }
 
+  async updateProfile(
+    userId: string,
+    updates: { dateOfBirth?: string; name?: string; phone?: string; city?: string }
+  ): Promise<Omit<User, 'password'>> {
+    const user = await this.db.getUserById(userId);
+    if (!user) {
+      throw new BadRequestError('User not found');
+    }
+
+    const updatedUser = await this.db.updateUser(userId, updates as Partial<User>);
+
+    if (!updatedUser) {
+      throw new BadRequestError('No se pudo actualizar el perfil');
+    }
+
+    return this.removePassword(updatedUser);
+  }
+
   async softDeleteAccount(userId: string): Promise<{ success: boolean; softDeletedAt: string }> {
     const user = await this.db.getUserById(userId);
     if (!user) {

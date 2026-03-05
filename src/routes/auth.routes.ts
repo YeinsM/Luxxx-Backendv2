@@ -100,6 +100,13 @@ router.post(
 router.get('/me', authMiddleware, authController.getCurrentUser.bind(authController));
 
 /**
+ * @route   PATCH /api/auth/me
+ * @desc    Update current user profile (dateOfBirth, name, phone, city)
+ * @access  Private
+ */
+router.patch('/me', authMiddleware, authController.updateProfile.bind(authController));
+
+/**
  * @route   POST /api/auth/consent/privacy
  * @desc    Persist privacy consent for current user
  * @access  Private
