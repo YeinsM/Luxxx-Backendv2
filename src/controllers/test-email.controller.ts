@@ -32,6 +32,7 @@ export const testEmail = async (req: Request, res: Response): Promise<void> => {
       updatedAt: new Date(),
       isActive: true,
       emailVerified: false,
+      role: 'USER',
       photos: [],
       videos: [],
     };

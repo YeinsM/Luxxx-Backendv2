@@ -21,6 +21,7 @@ export interface BaseUser {
   password: string;
   tokenVersion: number;
   userType: UserType;
+  role: 'USER' | 'ADMIN';
   createdAt: Date;
   updatedAt: Date;
   isActive: boolean;

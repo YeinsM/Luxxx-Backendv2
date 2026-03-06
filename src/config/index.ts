@@ -20,6 +20,12 @@ export const config = {
     secret: process.env.JWT_SECRET || 'fallback-secret-key',
     expiresIn: (process.env.JWT_EXPIRES_IN || '24h') as string,
   },
+  adminJwt: {
+    // Separate secret for admin tokens — set ADMIN_JWT_SECRET in .env
+    secret: process.env.ADMIN_JWT_SECRET || process.env.JWT_SECRET || 'fallback-admin-secret',
+    expiresIn: '4h' as string,
+    setupTokenExpires: '15m' as string,
+  },
   supabase: {
     url: process.env.SUPABASE_URL || '',
     anonKey: process.env.SUPABASE_ANON_KEY || '',

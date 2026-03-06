@@ -791,6 +791,199 @@ Este es un correo automático, por favor no respondas a este mensaje.
       return false;
     }
   }
+
+  /**
+   * Send invitation email to a newly created admin account.
+   * The setupLink contains the short-lived setup token so the admin
+   * can set their password on first login.
+   */
+  async sendAdminInvitationEmail(email: string, setupLink: string): Promise<boolean> {
+    if (!this.resend) {
+      console.log('⚠️  Admin invitation not sent - Resend not configured');
+      return false;
+    }
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#0f172a;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:30px 0;">
+            <tr>
+              <td align="center">
+                <table width="560" cellpadding="0" cellspacing="0" style="background-color:#1e293b;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+                  <tr>
+                    <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border-bottom:2px solid #334155;padding:40px 40px 30px 40px;text-align:center;">
+                      <div style="display:inline-block;background:#111827;border:1px solid #374151;border-radius:12px;padding:12px 20px;margin-bottom:20px;">
+                        <span style="color:#f8fafc;font-size:22px;font-weight:900;letter-spacing:2px;">LUXXX</span>
+                        <span style="color:#6366f1;font-size:11px;font-weight:700;display:block;letter-spacing:4px;margin-top:2px;">ADMIN PANEL</span>
+                      </div>
+                      <h1 style="color:#f1f5f9;margin:0;font-size:24px;font-weight:700;">Invitación Administrativa</h1>
+                      <p style="color:#94a3b8;margin:8px 0 0 0;font-size:14px;">Acceso exclusivo para administradores</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:36px 40px;">
+                      <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 16px 0;">
+                        Se ha creado una cuenta de administrador para <strong style="color:#f1f5f9;">${email}</strong> en la plataforma Luxxx.
+                      </p>
+                      <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 28px 0;">
+                        Haz clic en el botón de abajo para crear tu contraseña. Este enlace expira en <strong style="color:#f472b6;">15 minutos</strong>.
+                      </p>
+
+                      <table width="100%" cellpadding="0" cellspacing="0">
+                        <tr>
+                          <td align="center" style="padding:0 0 28px 0;">
+                            <a href="${setupLink}"
+                               style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;padding:14px 36px;text-decoration:none;border-radius:10px;display:inline-block;font-weight:700;font-size:15px;letter-spacing:0.5px;">
+                              Crear mi contraseña
+                            </a>
+                          </td>
+                        </tr>
+                      </table>
+
+                      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px 20px;">
+                        <p style="color:#64748b;font-size:12px;margin:0 0 6px 0;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Enlace directo</p>
+                        <p style="color:#475569;font-size:12px;margin:0;word-break:break-all;">${setupLink}</p>
+                      </div>
+
+                      <p style="color:#475569;font-size:13px;margin:24px 0 0 0;line-height:1.5;">
+                        Si no esperabas esta invitación, ignora este correo y no hagas clic en el enlace.
+                      </p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="border-top:1px solid #1e293b;background:#0f172a;padding:20px 40px;text-align:center;">
+                      <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} Luxxx Platform · Correo automático — no responder</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      const { data, error } = await this.resend.emails.send({
+        from: `Luxxx Admin <${config.email.fromEmail}>`,
+        to: [email],
+        subject: '🔐 Invitación — Crea tu contraseña de administrador',
+        html,
+      });
+
+      if (error) { console.error('❌ Admin invitation email failed:', error); return false; }
+      console.log(`✅ Admin invitation sent to ${email} (ID: ${data?.id})`);
+      return true;
+    } catch (err) {
+      console.error('❌ Admin invitation email error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Send a security alert when a suspicious admin-login attempt is detected.
+   * Called when an email is not found or is not an ADMIN.
+   */
+  async sendSuspiciousLoginAlert(
+    alertEmail: string,
+    details: {
+      attemptedEmail: string;
+      ip: string;
+      userAgent: string;
+      origin: string;
+      timestamp: string;
+    },
+  ): Promise<boolean> {
+    if (!this.resend || !alertEmail) {
+      console.warn('⚠️  Security alert not sent — Resend not configured or no alert email set');
+      return false;
+    }
+    try {
+      const html = `
+        <!DOCTYPE html>
+        <html>
+        <head><meta charset="UTF-8"></head>
+        <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#0f172a;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:30px 0;">
+            <tr>
+              <td align="center">
+                <table width="560" cellpadding="0" cellspacing="0" style="background-color:#1e293b;border-radius:12px;overflow:hidden;">
+                  <tr>
+                    <td style="background:#7f1d1d;padding:28px 36px;text-align:center;">
+                      <p style="color:#fecaca;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin:0 0 8px 0;">⚠ Alerta de Seguridad</p>
+                      <h1 style="color:#fef2f2;margin:0;font-size:22px;font-weight:800;">Intento de acceso sospechoso</h1>
+                      <p style="color:#fca5a5;font-size:13px;margin:8px 0 0 0;">Panel de Administración · Luxxx Platform</p>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:32px 36px;">
+                      <p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:0 0 24px 0;">
+                        Se detectó un intento de inicio de sesión en el panel administrativo con un email que <strong style="color:#f87171;">no corresponde a ningún administrador registrado</strong>.
+                      </p>
+
+                      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #334155;border-radius:8px;overflow:hidden;">
+                        <tr style="background:#0f172a;">
+                          <td style="padding:10px 16px;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;width:38%;">Campo</td>
+                          <td style="padding:10px 16px;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Valor</td>
+                        </tr>
+                        <tr style="border-top:1px solid #1e293b;">
+                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Email intentado</td>
+                          <td style="padding:12px 16px;color:#f87171;font-size:13px;font-weight:600;">${details.attemptedEmail}</td>
+                        </tr>
+                        <tr style="border-top:1px solid #1e293b;background:#0f172a38;">
+                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Dirección IP</td>
+                          <td style="padding:12px 16px;color:#e2e8f0;font-size:13px;font-family:monospace;">${details.ip}</td>
+                        </tr>
+                        <tr style="border-top:1px solid #1e293b;">
+                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Fecha y hora</td>
+                          <td style="padding:12px 16px;color:#e2e8f0;font-size:13px;">${details.timestamp}</td>
+                        </tr>
+                        <tr style="border-top:1px solid #1e293b;background:#0f172a38;">
+                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Origen</td>
+                          <td style="padding:12px 16px;color:#e2e8f0;font-size:13px;">${details.origin}</td>
+                        </tr>
+                        <tr style="border-top:1px solid #1e293b;">
+                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">User-Agent</td>
+                          <td style="padding:12px 16px;color:#94a3b8;font-size:12px;word-break:break-all;">${details.userAgent}</td>
+                        </tr>
+                      </table>
+
+                      <div style="background:#450a0a;border:1px solid #7f1d1d;border-radius:8px;padding:16px 20px;margin-top:24px;">
+                        <p style="color:#fca5a5;font-size:13px;margin:0;line-height:1.6;">
+                          <strong>Acción recomendada:</strong> Si reconoces esta actividad, puedes ignorar esta alerta. Si no, revisa el acceso a tu panel y considera cambiar las credenciales de tus administradores.
+                        </p>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="border-top:1px solid #1e293b;background:#0f172a;padding:16px 36px;text-align:center;">
+                      <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} Luxxx Platform · Alerta automática de seguridad</p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+        </body>
+        </html>
+      `;
+
+      const { data, error } = await this.resend.emails.send({
+        from: `Luxxx Security <${config.email.fromEmail}>`,
+        to: [alertEmail],
+        subject: '🚨 Alerta de seguridad — Intento de acceso sospechoso',
+        html,
+      });
+
+      if (error) { console.error('❌ Security alert email failed:', error); return false; }
+      console.log(`✅ Security alert sent to ${alertEmail} (ID: ${data?.id})`);
+      return true;
+    } catch (err) {
+      console.error('❌ Security alert email error:', err);
+      return false;
+    }
+  }
 }
 
 // Singleton instance

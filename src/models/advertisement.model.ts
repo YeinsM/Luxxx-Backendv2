@@ -79,7 +79,13 @@ export interface Advertisement {
   // Verification
   idType?: string;
   idNumber?: string;
-  verificationStatus: 'pending' | 'submitted' | 'approved' | 'rejected';
+  verificationStatus: 'PENDING' | 'SUBMITTED' | 'VERIFIED' | 'REJECTED';
+  verificationPhotoPresence?: string;
+  verificationPhotoBody?: string;
+  verificationPhotoIdentity?: string;
+
+  // Emoji title feature
+  titleEmoji?: string;
   
   // Promotion campaign
   promotionType?: string;
@@ -254,10 +260,17 @@ export interface CreateAdvertisementDto {
   // Step 2 - Verification
   idType?: string;
   idNumber?: string;
+  verificationPhotoPresence?: string;
+  verificationPhotoBody?: string;
+  verificationPhotoIdentity?: string;
   // Step 3 - Promotion
   promotionType?: string;
   targetAudience?: string;
   campaignDuration?: string;
+  selectedPlan?: string;      // STANDARD | PREMIUM | EXCLUSIVE
+  selectedDuration?: string;  // DAY | WEEK | MONTH
+  // Emoji title feature
+  titleEmoji?: string;
   // Related data
   services?: Array<{ serviceName: string; price?: number; notes?: string }>;
   rates?: Array<{ timeLabel: string; incallPrice?: string; outcallPrice?: string }>;
@@ -280,6 +293,58 @@ export interface CreateSavedSearchDto {
   name: string;
   queryString: string;
   resultsCount?: number;
+}
+
+// ============================================================
+// Promotion Plans (dynamic, admin-managed)
+// ============================================================
+
+export type PlanName = 'STANDARD' | 'PREMIUM' | 'EXCLUSIVE';
+export type DurationType = 'DAY' | 'WEEK' | 'MONTH';
+
+export interface PromotionPlanFeatures {
+  direct_contact?: boolean;
+  unlimited_videos?: boolean;
+  max_photos?: number;
+  website_link?: boolean;
+  rotating_banner?: boolean;
+  promo_tag?: boolean;
+  emoji_in_title?: boolean;
+  emoji_price_per_day?: number;
+  position?: string;
+  [key: string]: unknown;
+}
+
+export interface PromotionPlan {
+  id: string;
+  name: PlanName;
+  pricePerDay: number;
+  pricePerWeek: number;
+  pricePerMonth: number;
+  features: PromotionPlanFeatures;
+  isActive: boolean;
+  updatedAt: Date;
+}
+
+export interface AdvertisementPromotion {
+  id: string;
+  advertisementId: string;
+  planId: string;
+  durationType: DurationType;
+  price: number;
+  startDate?: Date;
+  endDate?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface UpsertAdvertisementPromotionDto {
+  advertisementId: string;
+  planId: string;
+  durationType: DurationType;
+  price: number;
+  startDate?: Date;
+  endDate?: Date;
 }
 
 export interface ProfileSearchParams {

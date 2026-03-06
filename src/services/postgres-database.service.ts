@@ -253,6 +253,7 @@ export class PostgresDatabaseService implements DatabaseService {
       softDeletedAt: data.soft_deleted_at
         ? new Date(data.soft_deleted_at)
         : undefined,
+      role: (data.role ?? 'USER') as 'USER' | 'ADMIN',
       photos: [],
       videos: [],
     };

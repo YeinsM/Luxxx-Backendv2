@@ -13,6 +13,9 @@ import {
   SavedSearch,
   CreateAdvertisementDto,
   ProfileSearchParams,
+  PromotionPlan,
+  AdvertisementPromotion,
+  UpsertAdvertisementPromotionDto,
 } from '../models/advertisement.model';
 import { InternalServerError, NotFoundError } from '../models/error.model';
 
@@ -778,6 +781,10 @@ export class AppDatabaseService {
     if (ad.budget !== undefined) row.budget = ad.budget;
     if (ad.idType !== undefined) row.id_type = ad.idType;
     if (ad.idNumber !== undefined) row.id_number = ad.idNumber;
+    if ((ad as any).verificationPhotoPresence !== undefined) row.verification_photo_presence = (ad as any).verificationPhotoPresence;
+    if ((ad as any).verificationPhotoBody !== undefined) row.verification_photo_body = (ad as any).verificationPhotoBody;
+    if ((ad as any).verificationPhotoIdentity !== undefined) row.verification_photo_identity = (ad as any).verificationPhotoIdentity;
+    if ((ad as any).titleEmoji !== undefined) row.title_emoji = (ad as any).titleEmoji;
     if (ad.promotionType !== undefined) row.promotion_type = ad.promotionType;
     if (ad.targetAudience !== undefined) row.target_audience = ad.targetAudience;
     if (ad.campaignDuration !== undefined) row.campaign_duration = ad.campaignDuration;
@@ -840,7 +847,11 @@ export class AppDatabaseService {
       budget: data.budget ? parseFloat(data.budget) : undefined,
       idType: data.id_type,
       idNumber: data.id_number,
-      verificationStatus: data.verification_status,
+      verificationStatus: data.verification_status ?? 'PENDING',
+      verificationPhotoPresence: data.verification_photo_presence,
+      verificationPhotoBody: data.verification_photo_body,
+      verificationPhotoIdentity: data.verification_photo_identity,
+      titleEmoji: data.title_emoji,
       promotionType: data.promotion_type,
       targetAudience: data.target_audience,
       campaignDuration: data.campaign_duration,
@@ -977,6 +988,107 @@ export class AppDatabaseService {
       outcallPrice: row.outcall_price,
       createdAt: new Date(row.created_at),
     }));
+  }
+
+  // ============================================================
+  // PROMOTION PLANS
+  // ============================================================
+
+  async getPromotionPlans(): Promise<PromotionPlan[]> {
+    const { data, error } = await this.client
+      .from('promotion_plans')
+      .select('*')
+      .eq('is_active', true)
+      .order('price_per_day', { ascending: true });
+
+    if (error) throw new InternalServerError(`Failed to fetch promotion plans: ${error.message}`);
+    return (data || []).map(this.deserializePromotionPlan);
+  }
+
+  async updatePromotionPlan(
+    id: string,
+    updates: Partial<Pick<PromotionPlan, 'pricePerDay' | 'pricePerWeek' | 'pricePerMonth' | 'features' | 'isActive'>>,
+  ): Promise<PromotionPlan> {
+    const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (updates.pricePerDay !== undefined) row.price_per_day = updates.pricePerDay;
+    if (updates.pricePerWeek !== undefined) row.price_per_week = updates.pricePerWeek;
+    if (updates.pricePerMonth !== undefined) row.price_per_month = updates.pricePerMonth;
+    if (updates.features !== undefined) row.features = updates.features;
+    if (updates.isActive !== undefined) row.is_active = updates.isActive;
+
+    const { data, error } = await this.client
+      .from('promotion_plans')
+      .update(row)
+      .eq('id', id)
+      .select()
+      .single();
+
+    if (error) throw new InternalServerError(`Failed to update promotion plan: ${error.message}`);
+    if (!data) throw new NotFoundError('Promotion plan not found');
+    return this.deserializePromotionPlan(data);
+  }
+
+  // ============================================================
+  // ADVERTISEMENT PROMOTIONS
+  // ============================================================
+
+  async upsertAdvertisementPromotion(dto: UpsertAdvertisementPromotionDto): Promise<AdvertisementPromotion> {
+    const row = {
+      advertisement_id: dto.advertisementId,
+      plan_id: dto.planId,
+      duration_type: dto.durationType,
+      price: dto.price,
+      start_date: dto.startDate?.toISOString(),
+      end_date: dto.endDate?.toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const { data, error } = await this.client
+      .from('advertisement_promotions')
+      .upsert(row, { onConflict: 'advertisement_id' })
+      .select()
+      .single();
+
+    if (error) throw new InternalServerError(`Failed to save promotion: ${error.message}`);
+    return this.deserializeAdvertisementPromotion(data);
+  }
+
+  async getAdvertisementPromotion(advertisementId: string): Promise<AdvertisementPromotion | null> {
+    const { data, error } = await this.client
+      .from('advertisement_promotions')
+      .select('*')
+      .eq('advertisement_id', advertisementId)
+      .maybeSingle();
+
+    if (error) throw new InternalServerError(`Failed to fetch promotion: ${error.message}`);
+    return data ? this.deserializeAdvertisementPromotion(data) : null;
+  }
+
+  private deserializePromotionPlan(data: any): PromotionPlan {
+    return {
+      id: data.id,
+      name: data.name,
+      pricePerDay: parseFloat(data.price_per_day),
+      pricePerWeek: parseFloat(data.price_per_week),
+      pricePerMonth: parseFloat(data.price_per_month),
+      features: data.features ?? {},
+      isActive: data.is_active,
+      updatedAt: new Date(data.updated_at),
+    };
+  }
+
+  private deserializeAdvertisementPromotion(data: any): AdvertisementPromotion {
+    return {
+      id: data.id,
+      advertisementId: data.advertisement_id,
+      planId: data.plan_id,
+      durationType: data.duration_type,
+      price: parseFloat(data.price),
+      startDate: data.start_date ? new Date(data.start_date) : undefined,
+      endDate: data.end_date ? new Date(data.end_date) : undefined,
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
+    };
   }
 }
 

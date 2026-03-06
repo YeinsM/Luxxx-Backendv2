@@ -52,6 +52,7 @@ export class AuthService {
       email: dto.email.toLowerCase(),
       password: hashedPassword,
       userType: UserType.ESCORT,
+      role: 'USER',
       name: dto.name,
       phone: dto.phone,
       city: dto.city,
@@ -95,6 +96,7 @@ export class AuthService {
       email: dto.email.toLowerCase(),
       password: hashedPassword,
       userType: UserType.MEMBER,
+      role: 'USER',
       username: dto.username,
       city: dto.city,
       createdAt: new Date(),
@@ -135,6 +137,7 @@ export class AuthService {
       email: dto.email.toLowerCase(),
       password: hashedPassword,
       userType: UserType.AGENCY,
+      role: 'USER',
       agencyName: dto.agencyName,
       phone: dto.phone,
       city: dto.city,
@@ -177,6 +180,7 @@ export class AuthService {
       email: dto.email.toLowerCase(),
       password: hashedPassword,
       userType: UserType.CLUB,
+      role: 'USER',
       clubName: dto.clubName,
       phone: dto.phone,
       address: dto.address,
@@ -592,6 +596,7 @@ export class AuthService {
       email: user.email,
       userType: user.userType,
       tokenVersion: user.tokenVersion,
+      role: user.role ?? 'USER',
     });
 
     return {

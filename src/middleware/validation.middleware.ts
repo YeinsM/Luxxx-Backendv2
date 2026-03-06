@@ -137,6 +137,29 @@ export const createAdvertisementValidation = [
     .withMessage('Name must be between 2 and 100 characters'),
   body('category').optional().trim(),
   body('age').optional().isInt({ min: 21, max: 99 }).withMessage('Escort age must be 21 or older'),
+  // Country must be NL
+  body('country')
+    .optional()
+    .custom((value: string | undefined) => {
+      if (value && value.toUpperCase() !== 'NL') {
+        throw new Error('Only advertisements in the Netherlands (NL) are currently supported');
+      }
+      return true;
+    }),
+  // Verification photo URLs (optional, stored on upload)
+  body('verificationPhotoPresence').optional().trim().isURL().withMessage('Invalid verification photo URL'),
+  body('verificationPhotoBody').optional().trim().isURL().withMessage('Invalid body photo URL'),
+  body('verificationPhotoIdentity').optional().trim().isURL().withMessage('Invalid identity photo URL'),
+  // Promotion fields
+  body('selectedPlan')
+    .optional()
+    .isIn(['STANDARD', 'PREMIUM', 'EXCLUSIVE'])
+    .withMessage('Plan must be STANDARD, PREMIUM or EXCLUSIVE'),
+  body('selectedDuration')
+    .optional()
+    .isIn(['DAY', 'WEEK', 'MONTH'])
+    .withMessage('Duration must be DAY, WEEK or MONTH'),
+  body('titleEmoji').optional().trim(),
 ];
 
 export const createReviewValidation = [

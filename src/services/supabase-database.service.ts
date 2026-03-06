@@ -204,6 +204,7 @@ export class SupabaseDatabaseService implements DatabaseService {
       email: data.email,
       password: data.password,
       userType: data.user_type as UserType,
+      role: (data.role ?? 'USER') as 'USER' | 'ADMIN',
       tokenVersion: data.token_version ?? 0,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),

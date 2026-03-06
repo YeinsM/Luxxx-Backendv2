@@ -11,6 +11,9 @@ import billingRoutes from './billing.routes';
 import savedSearchRoutes from './saved-search.routes';
 import videoRoutes from './video.routes';
 import zipcodeRoutes from './zipcode.routes';
+import promotionPlanRoutes from './promotion-plan.routes';
+import adminRoutes from './admin.routes';
+import adminAuthRoutes from './admin-auth.routes';
 import { testEmail } from '../controllers/test-email.controller';
 
 const router = Router();
@@ -38,6 +41,11 @@ router.use('/videos', videoRoutes);
 
 // Utilities
 router.use('/zipcode', zipcodeRoutes);
+router.use('/promotion-plans', promotionPlanRoutes);
+
+// Admin (public auth endpoints FIRST — before the protected /admin routes)
+router.use('/admin-auth', adminAuthRoutes);
+router.use('/admin', adminRoutes);
 
 // Test email endpoint
 router.post('/test-email', testEmail);
