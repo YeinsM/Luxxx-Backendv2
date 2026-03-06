@@ -10,6 +10,7 @@ import notificationRoutes from './notification.routes';
 import billingRoutes from './billing.routes';
 import savedSearchRoutes from './saved-search.routes';
 import videoRoutes from './video.routes';
+import zipcodeRoutes from './zipcode.routes';
 import { testEmail } from '../controllers/test-email.controller';
 
 const router = Router();
@@ -34,6 +35,9 @@ router.use('/notifications', notificationRoutes);
 router.use('/billing', billingRoutes);
 router.use('/saved-searches', savedSearchRoutes);
 router.use('/videos', videoRoutes);
+
+// Utilities
+router.use('/zipcode', zipcodeRoutes);
 
 // Test email endpoint
 router.post('/test-email', testEmail);

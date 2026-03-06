@@ -55,6 +55,9 @@ export const config = {
     apiKey: process.env.CLOUDINARY_API_KEY || '',
     apiSecret: process.env.CLOUDINARY_API_SECRET || '',
   },
+  zipcode: {
+    apiKey: process.env.ZIPCODEBASE_API_KEY || '',
+  },
 };
 
 export const isSupabaseEnabled = (): boolean => {
