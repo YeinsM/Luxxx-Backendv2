@@ -20,6 +20,12 @@ export class AdvertisementController {
       const userId = (req as AuthRequest).user?.userId;
       if (!userId) throw new BadRequestError('User ID not found');
 
+      // Force offline if the user's identity is not verified
+      const user = await db.getUserById(userId);
+      if (!user || user.verificationStatus !== 'VERIFIED') {
+        req.body = { ...req.body, isOnline: false };
+      }
+
       const ad = await db.createAdvertisement(userId, req.body);
       const response: ApiResponse = {
         success: true,
@@ -73,6 +79,12 @@ export class AdvertisementController {
 
       const userId = (req as AuthRequest).user?.userId;
       if (!userId) throw new BadRequestError('User ID not found');
+
+      // Force offline if the user's identity is not verified
+      const user = await db.getUserById(userId);
+      if (!user || user.verificationStatus !== 'VERIFIED') {
+        req.body = { ...req.body, isOnline: false };
+      }
 
       const ad = await db.updateAdvertisement(req.params.id, userId, req.body);
       const response: ApiResponse = {

@@ -170,6 +170,17 @@ export class AppDatabaseService {
     return !error;
   }
 
+  /** Returns the verification_status for a user, or null if not found */
+  async getUserById(userId: string): Promise<{ id: string; verificationStatus: string | null } | null> {
+    const { data, error } = await this.client
+      .from('users')
+      .select('id, verification_status')
+      .eq('id', userId)
+      .single();
+    if (error || !data) return null;
+    return { id: data.id, verificationStatus: data.verification_status ?? null };
+  }
+
   async softDeleteAdvertisementsByUserId(userId: string): Promise<number> {
     const { data, error } = await this.client
       .from('advertisements')
