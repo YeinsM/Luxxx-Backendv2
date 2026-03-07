@@ -33,4 +33,11 @@ router.get('/invoices', authMiddleware, controller.getInvoices.bind(controller))
  */
 router.get('/invoices/:id/download', authMiddleware, controller.downloadInvoice.bind(controller));
 
+/**
+ * @route   POST /api/billing/credits/purchase
+ * @desc    Simulate credit purchase — records an income transaction
+ * @access  Private
+ */
+router.post('/credits/purchase', authMiddleware, controller.purchaseCredits.bind(controller));
+
 export default router;

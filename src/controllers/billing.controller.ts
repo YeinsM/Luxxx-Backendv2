@@ -61,6 +61,28 @@ export class BillingController {
     }
   }
 
+  /** POST /api/billing/credits/purchase — Simulate credit purchase */
+  async purchaseCredits(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const { credits, amount, description } = req.body as { credits: number; amount: number; description?: string };
+      if (!credits || !amount || credits <= 0 || amount <= 0) {
+        throw new BadRequestError('Invalid credits or amount');
+      }
+
+      const desc = description ?? `Compra de ${credits} créditos`;
+      await db.addTransaction(userId, 'income', desc, amount);
+      const balance = await db.getBalance(userId);
+
+      const response: ApiResponse = { success: true, data: balance };
+      res.status(201).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** GET /api/billing/invoices/:id/download — Download invoice */
   async downloadInvoice(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

@@ -604,6 +604,17 @@ export class AppDatabaseService {
     return (data || []).map(this.deserializeTransaction);
   }
 
+  async addTransaction(userId: string, type: 'income' | 'expense', description: string, amount: number): Promise<Transaction> {
+    const { data, error } = await this.client
+      .from('transactions')
+      .insert([{ user_id: userId, type, description, amount }])
+      .select()
+      .single();
+
+    if (error) throw new InternalServerError(`Failed to record transaction: ${error.message}`);
+    return this.deserializeTransaction(data);
+  }
+
   async getBalance(userId: string): Promise<{ totalBalance: number; totalIncome: number; totalExpenses: number }> {
     const { data, error } = await this.client
       .from('transactions')
