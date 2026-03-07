@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { AdvertisementController } from '../controllers/advertisement.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { createAdvertisementValidation } from '../middleware/validation.middleware';
+import { createAdvertisementValidation, updateAdvertisementValidation } from '../middleware/validation.middleware';
 
 const router = Router();
 const controller = new AdvertisementController();
@@ -40,7 +40,7 @@ router.get('/:id', controller.getById.bind(controller));
 router.put(
   '/:id',
   authMiddleware,
-  createAdvertisementValidation,
+  updateAdvertisementValidation,
   controller.update.bind(controller)
 );
 

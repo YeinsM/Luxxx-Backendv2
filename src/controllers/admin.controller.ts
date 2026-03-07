@@ -43,16 +43,19 @@ export async function listUsers(
     if (error) throw error;
 
     res.json({
-      data: data.map((u: any) => ({
-        id: u.id,
-        email: u.email,
-        userType: u.user_type,
-        role: u.role ?? "USER",
-        isActive: u.is_active,
-        emailVerified: u.email_verified,
-        createdAt: u.created_at,
-      })),
-      meta: { total: count ?? 0, page, limit },
+      success: true,
+      data: {
+        data: data.map((u: any) => ({
+          id: u.id,
+          email: u.email,
+          userType: u.user_type,
+          role: u.role ?? "USER",
+          isActive: u.is_active,
+          emailVerified: u.email_verified,
+          createdAt: u.created_at,
+        })),
+        meta: { total: count ?? 0, page, limit },
+      },
     });
   } catch (err) {
     next(err);
@@ -201,19 +204,24 @@ export async function listVerifications(
     const { data, error, count } = await query;
     if (error) throw error;
 
+    const items = (data ?? []).map((row: any) => ({
+      id: row.id,
+      name: row.name,
+      userId: row.user_id,
+      verificationStatus: row.verification_status ?? "PENDING",
+      hasPresencePhoto: !!row.verification_photo_presence,
+      hasBodyPhoto: !!row.verification_photo_body,
+      hasIdentityPhoto: !!row.verification_photo_identity,
+      updatedAt: row.updated_at,
+      createdAt: row.created_at,
+    }));
+
     res.json({
-      data: (data ?? []).map((row: any) => ({
-        id: row.id,
-        name: row.name,
-        userId: row.user_id,
-        verificationStatus: row.verification_status ?? "PENDING",
-        hasPresencePhoto: !!row.verification_photo_presence,
-        hasBodyPhoto: !!row.verification_photo_body,
-        hasIdentityPhoto: !!row.verification_photo_identity,
-        updatedAt: row.updated_at,
-        createdAt: row.created_at,
-      })),
-      meta: { total: count ?? 0, page, limit },
+      success: true,
+      data: {
+        data: items,
+        meta: { total: count ?? 0, page, limit },
+      },
     });
   } catch (err) {
     next(err);
@@ -244,6 +252,7 @@ export async function getVerificationDetail(
     if (error || !data) throw new NotFoundError("Anuncio no encontrado");
 
     res.json({
+      success: true,
       data: {
         id: data.id,
         name: data.name,
@@ -264,7 +273,8 @@ export async function getVerificationDetail(
 /**
  * PATCH /api/admin/verifications/:adId
  * Updates verification_status for an advertisement.
- * Body: { status: 'PENDING' | 'SUBMITTED' | 'VERIFIED' | 'REJECTED' }
+ * Body: { status: 'PENDING' | 'SUBMITTED' | 'VERIFIED' | 'REJECTED', comment?: string }
+ * comment is required when status === 'REJECTED'
  */
 export async function updateVerificationStatus(
   req: Request,
@@ -273,7 +283,7 @@ export async function updateVerificationStatus(
 ): Promise<void> {
   try {
     const { adId } = req.params;
-    const { status } = req.body as { status: VerificationStatus };
+    const { status, comment } = req.body as { status: VerificationStatus; comment?: string };
 
     if (!VALID_STATUSES.includes(status)) {
       throw new BadRequestError(
@@ -281,7 +291,21 @@ export async function updateVerificationStatus(
       );
     }
 
+    if (status === "REJECTED" && (!comment || !comment.trim())) {
+      throw new BadRequestError("El comentario es obligatorio al rechazar una verificación");
+    }
+
     const supabase = (db as any).client;
+
+    // Fetch ad + user email in one join
+    const { data: adData, error: adError } = await supabase
+      .from("advertisements")
+      .select("id, name, user_id, users!inner(email)")
+      .eq("id", adId)
+      .single();
+
+    if (adError || !adData) throw new NotFoundError("Anuncio no encontrado");
+
     const { data, error } = await supabase
       .from("advertisements")
       .update({
@@ -294,7 +318,19 @@ export async function updateVerificationStatus(
 
     if (error || !data) throw new NotFoundError("Anuncio no encontrado");
 
+    // Send email notification for VERIFIED and REJECTED
+    if (status === "VERIFIED" || status === "REJECTED") {
+      const userEmail = (adData.users as any)?.email;
+      if (userEmail) {
+        const emailService = getEmailService();
+        emailService
+          .sendVerificationStatusEmail(userEmail, adData.name, status, comment?.trim())
+          .catch((e) => console.error("❌ Failed to send verification email:", e));
+      }
+    }
+
     res.json({
+      success: true,
       data: {
         id: data.id,
         name: data.name,

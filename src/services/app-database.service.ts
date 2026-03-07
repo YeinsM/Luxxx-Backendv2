@@ -87,7 +87,11 @@ export class AppDatabaseService {
     const ad = this.deserializeAd(data);
     ad.services = await this.getAdServices(id);
     ad.rates = await this.getAdRates(id);
-    ad.photos = await this.getUserMedia(ad.userId, 'image');
+    const allPhotos = await this.getUserMedia(ad.userId, 'image');
+    // Filter to only selected photos for public view
+    ad.photos = ad.selectedPhotoIds && ad.selectedPhotoIds.length > 0
+      ? allPhotos.filter(p => (ad.selectedPhotoIds as string[]).includes(p.url))
+      : allPhotos;
     ad.videos = await this.getUserMedia(ad.userId, 'video');
     return ad;
   }
@@ -106,6 +110,7 @@ export class AppDatabaseService {
     const ad = this.deserializeAd(data);
     ad.services = await this.getAdServices(ad.id);
     ad.rates = await this.getAdRates(ad.id);
+    // Return ALL photos for the user's own management view (so they can manage selection)
     ad.photos = await this.getUserMedia(userId, 'image');
     ad.videos = await this.getUserMedia(userId, 'video');
     return ad;
@@ -189,7 +194,7 @@ export class AppDatabaseService {
       .update({
         id_type: idType,
         id_number: idNumber,
-        verification_status: 'submitted',
+        verification_status: 'SUBMITTED',
       })
       .eq('id', id)
       .eq('user_id', userId)
@@ -788,6 +793,7 @@ export class AppDatabaseService {
     if (ad.promotionType !== undefined) row.promotion_type = ad.promotionType;
     if (ad.targetAudience !== undefined) row.target_audience = ad.targetAudience;
     if (ad.campaignDuration !== undefined) row.campaign_duration = ad.campaignDuration;
+    if ((ad as any).selectedPhotoIds !== undefined) row.selected_photo_ids = (ad as any).selectedPhotoIds;
     return row;
   }
 
@@ -855,6 +861,7 @@ export class AppDatabaseService {
       promotionType: data.promotion_type,
       targetAudience: data.target_audience,
       campaignDuration: data.campaign_duration,
+      selectedPhotoIds: data.selected_photo_ids || [],
       viewCount: data.view_count || 0,
       rating: parseFloat(data.rating) || 0,
       reviewCount: data.review_count || 0,

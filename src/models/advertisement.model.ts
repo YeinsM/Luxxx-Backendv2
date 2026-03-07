@@ -101,6 +101,9 @@ export interface Advertisement {
   createdAt: Date;
   updatedAt: Date;
   
+  // Selected photos (URLs of photos the escort chose to show on their ad)
+  selectedPhotoIds?: string[];
+
   // Joined data (not stored in advertisements table)
   services?: AdvertisementService[];
   rates?: AdvertisementRate[];
@@ -271,6 +274,8 @@ export interface CreateAdvertisementDto {
   selectedDuration?: string;  // DAY | WEEK | MONTH
   // Emoji title feature
   titleEmoji?: string;
+  // Selected photos
+  selectedPhotoIds?: string[];
   // Related data
   services?: Array<{ serviceName: string; price?: number; notes?: string }>;
   rates?: Array<{ timeLabel: string; incallPrice?: string; outcallPrice?: string }>;

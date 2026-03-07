@@ -128,13 +128,7 @@ export const resetPasswordValidation = [
     .withMessage('New password must be at least 6 characters'),
 ];
 
-export const createAdvertisementValidation = [
-  body('name')
-    .trim()
-    .notEmpty()
-    .withMessage('Name is required')
-    .isLength({ min: 2, max: 100 })
-    .withMessage('Name must be between 2 and 100 characters'),
+const advertisementOptionalFields = [
   body('category').optional().trim(),
   body('age').optional().isInt({ min: 21, max: 99 }).withMessage('Escort age must be 21 or older'),
   // Country must be NL
@@ -161,6 +155,27 @@ export const createAdvertisementValidation = [
     .withMessage('Duration must be DAY, WEEK or MONTH'),
   body('titleEmoji').optional().trim(),
 ];
+
+export const createAdvertisementValidation = [
+  body('name')
+    .trim()
+    .notEmpty()
+    .withMessage('Name is required')
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2 and 100 characters'),
+  ...advertisementOptionalFields,
+];
+
+export const updateAdvertisementValidation = [
+  body('name')
+    .optional()
+    .trim()
+    .isLength({ min: 2, max: 100 })
+    .withMessage('Name must be between 2 and 100 characters'),
+  ...advertisementOptionalFields,
+];
+
+// updateAdvertisementValidation shares all optional fields above — defined inline
 
 export const createReviewValidation = [
   body('advertisementId').notEmpty().withMessage('Advertisement ID is required'),

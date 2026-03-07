@@ -7,6 +7,7 @@ import {
   uploadMyVideos,
   deleteMyPhoto,
   deleteMyVideo,
+  uploadVerificationPhoto,
 } from '../controllers/profile-media.controller';
 
 const router = Router();
@@ -31,6 +32,13 @@ router.get('/videos', authMiddleware, getMyVideos);
  * @access  Private
  */
 router.post('/photos', authMiddleware, uploadMyPhotos);
+
+/**
+ * @route   POST /api/profile/media/verification-photos
+ * @desc    Upload a verification photo (stored in private folder, never in album)
+ * @access  Private
+ */
+router.post('/verification-photos', authMiddleware, uploadVerificationPhoto);
 
 /**
  * @route   POST /api/profile/media/videos

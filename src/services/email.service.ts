@@ -815,7 +815,7 @@ Este es un correo automático, por favor no respondas a este mensaje.
                   <tr>
                     <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border-bottom:2px solid #334155;padding:40px 40px 30px 40px;text-align:center;">
                       <div style="display:inline-block;background:#111827;border:1px solid #374151;border-radius:12px;padding:12px 20px;margin-bottom:20px;">
-                        <span style="color:#f8fafc;font-size:22px;font-weight:900;letter-spacing:2px;">LUXXX</span>
+                        <span style="color:#f8fafc;font-size:22px;font-weight:900;letter-spacing:2px;">LUSTY</span>
                         <span style="color:#6366f1;font-size:11px;font-weight:700;display:block;letter-spacing:4px;margin-top:2px;">ADMIN PANEL</span>
                       </div>
                       <h1 style="color:#f1f5f9;margin:0;font-size:24px;font-weight:700;">Invitación Administrativa</h1>
@@ -825,7 +825,7 @@ Este es un correo automático, por favor no respondas a este mensaje.
                   <tr>
                     <td style="padding:36px 40px;">
                       <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 16px 0;">
-                        Se ha creado una cuenta de administrador para <strong style="color:#f1f5f9;">${email}</strong> en la plataforma Luxxx.
+                        Se ha creado una cuenta de administrador para <strong style="color:#f1f5f9;">${email}</strong> en la plataforma Lusty.
                       </p>
                       <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 28px 0;">
                         Haz clic en el botón de abajo para crear tu contraseña. Este enlace expira en <strong style="color:#f472b6;">15 minutos</strong>.
@@ -854,7 +854,7 @@ Este es un correo automático, por favor no respondas a este mensaje.
                   </tr>
                   <tr>
                     <td style="border-top:1px solid #1e293b;background:#0f172a;padding:20px 40px;text-align:center;">
-                      <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} Luxxx Platform · Correo automático — no responder</p>
+                      <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} Lusty Platform · Correo automático — no responder</p>
                     </td>
                   </tr>
                 </table>
@@ -866,7 +866,7 @@ Este es un correo automático, por favor no respondas a este mensaje.
       `;
 
       const { data, error } = await this.resend.emails.send({
-        from: `Luxxx Admin <${config.email.fromEmail}>`,
+        from: `Lusty Admin <${config.email.fromEmail}>`,
         to: [email],
         subject: '🔐 Invitación — Crea tu contraseña de administrador',
         html,
@@ -913,7 +913,7 @@ Este es un correo automático, por favor no respondas a este mensaje.
                     <td style="background:#7f1d1d;padding:28px 36px;text-align:center;">
                       <p style="color:#fecaca;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin:0 0 8px 0;">⚠ Alerta de Seguridad</p>
                       <h1 style="color:#fef2f2;margin:0;font-size:22px;font-weight:800;">Intento de acceso sospechoso</h1>
-                      <p style="color:#fca5a5;font-size:13px;margin:8px 0 0 0;">Panel de Administración · Luxxx Platform</p>
+                      <p style="color:#fca5a5;font-size:13px;margin:8px 0 0 0;">Panel de Administración · Lusty Platform</p>
                     </td>
                   </tr>
                   <tr>
@@ -958,7 +958,7 @@ Este es un correo automático, por favor no respondas a este mensaje.
                   </tr>
                   <tr>
                     <td style="border-top:1px solid #1e293b;background:#0f172a;padding:16px 36px;text-align:center;">
-                      <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} Luxxx Platform · Alerta automática de seguridad</p>
+                      <p style="color:#475569;font-size:12px;margin:0;">© ${new Date().getFullYear()} Lusty Platform · Alerta automática de seguridad</p>
                     </td>
                   </tr>
                 </table>
@@ -970,7 +970,7 @@ Este es un correo automático, por favor no respondas a este mensaje.
       `;
 
       const { data, error } = await this.resend.emails.send({
-        from: `Luxxx Security <${config.email.fromEmail}>`,
+        from: `Lusty Security <${config.email.fromEmail}>`,
         to: [alertEmail],
         subject: '🚨 Alerta de seguridad — Intento de acceso sospechoso',
         html,
@@ -981,6 +981,109 @@ Este es un correo automático, por favor no respondas a este mensaje.
       return true;
     } catch (err) {
       console.error('❌ Security alert email error:', err);
+      return false;
+    }
+  }
+
+  /**
+   * Send verification status notification email (VERIFIED or REJECTED)
+   */
+  async sendVerificationStatusEmail(
+    toEmail: string,
+    adName: string,
+    status: 'VERIFIED' | 'REJECTED',
+    comment?: string,
+  ): Promise<boolean> {
+    if (!this.resend) {
+      console.log('❌ Email not sent - Resend not configured');
+      return false;
+    }
+
+    const isVerified = status === 'VERIFIED';
+    const subject = isVerified
+      ? `✅ Tu anuncio "${adName}" ha sido verificado`
+      : `❌ Tu anuncio "${adName}" ha sido rechazado`;
+
+    const statusColor = isVerified ? '#16a34a' : '#dc2626';
+    const statusBg = isVerified ? '#f0fdf4' : '#fef2f2';
+    const statusLabel = isVerified ? 'VERIFICADO' : 'RECHAZADO';
+    const statusIcon = isVerified ? '✅' : '❌';
+
+    const commentBlock = !isVerified && comment
+      ? `
+        <tr>
+          <td style="padding: 0 30px 30px 30px;">
+            <div style="background-color: #fff7ed; border-left: 4px solid #f97316; border-radius: 4px; padding: 16px 20px;">
+              <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.05em;">
+                Motivo del rechazo
+              </p>
+              <p style="margin: 0; font-size: 15px; color: #451a03; line-height: 1.6;">${comment}</p>
+            </div>
+          </td>
+        </tr>`
+      : '';
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#f4f4f4;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:20px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+        <tr>
+          <td style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:40px 20px;text-align:center;">
+            <h1 style="color:#ffffff;margin:0;font-size:26px;letter-spacing:-0.5px;">Lusty</h1>
+            <p style="color:rgba(255,255,255,0.6);margin:6px 0 0 0;font-size:13px;">Panel de verificación</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:36px 30px 20px 30px;text-align:center;">
+            <div style="display:inline-block;background-color:${statusBg};border:1.5px solid ${statusColor};border-radius:999px;padding:8px 22px;margin-bottom:20px;">
+              <span style="color:${statusColor};font-size:14px;font-weight:700;letter-spacing:0.08em;">${statusIcon} ${statusLabel}</span>
+            </div>
+            <h2 style="margin:0 0 10px 0;font-size:20px;color:#111827;">${subject.replace(/^[✅❌] /, '')}</h2>
+            <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.6;">
+              ${isVerified
+                ? 'Tu solicitud de verificación ha sido aprobada. Ya puedes disfrutar de los beneficios de tener un perfil verificado.'
+                : 'Tu solicitud de verificación no ha sido aprobada. Revisa el motivo a continuación y vuelve a intentarlo.'}
+            </p>
+          </td>
+        </tr>
+        ${commentBlock}
+        <tr>
+          <td style="padding:0 30px 36px 30px;text-align:center;">
+            <p style="margin:0;font-size:13px;color:#9ca3af;">
+              Si tienes dudas, ponte en contacto con nuestro equipo de soporte.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="background-color:#f9fafb;padding:16px 30px;border-top:1px solid #e5e7eb;text-align:center;">
+            <p style="margin:0;font-size:12px;color:#9ca3af;">Este es un correo automático, por favor no respondas a este mensaje.</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    try {
+      const { data, error } = await this.resend.emails.send({
+        from: `${config.email.fromName} <${config.email.fromEmail}>`,
+        to: [toEmail],
+        subject,
+        html,
+      });
+
+      if (error) {
+        console.error('❌ Verification status email failed:', error);
+        return false;
+      }
+      console.log(`✅ Verification status email sent to ${toEmail} (ID: ${data?.id})`);
+      return true;
+    } catch (err) {
+      console.error('❌ Verification status email error:', err);
       return false;
     }
   }

@@ -111,8 +111,7 @@ export class AdvertisementController {
       const userId = (req as AuthRequest).user?.userId;
       if (!userId) throw new BadRequestError('User ID not found');
 
-      const { idType, idNumber } = req.body;
-      if (!idType || !idNumber) throw new BadRequestError('ID type and number are required');
+      const { idType = 'identity_document', idNumber = 'N/A' } = req.body;
 
       const ad = await db.verifyAdvertisement(req.params.id, userId, idType, idNumber);
       const response: ApiResponse = {

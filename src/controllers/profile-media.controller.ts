@@ -175,6 +175,41 @@ export const uploadMyVideos = async (req: Request, res: Response): Promise<void>
 };
 
 /**
+ * Upload verification photos — stored in a private Cloudinary folder,
+ * never persisted to user_media so they never appear in the user's album.
+ */
+export const uploadVerificationPhoto = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as AuthRequest).user?.userId;
+    const { photo } = req.body;
+
+    if (!userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    if (!photo || typeof photo !== 'string') {
+      res.status(400).json({ error: 'A base64 photo string is required' });
+      return;
+    }
+
+    const result = await cloudinaryService.uploadBase64Image(photo, {
+      folder: `lusty/private/verification/${userId}`,
+      tags: [userId, 'verification'],
+      transformation: { quality: 'auto', format: 'webp' },
+    });
+
+    res.status(200).json({
+      message: 'Verification photo uploaded successfully',
+      data: { url: result.url, publicId: result.publicId },
+    });
+  } catch (error: any) {
+    console.error('Upload verification photo error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload verification photo' });
+  }
+};
+
+/**
  * Delete a photo of the authenticated user
  */
 export const deleteMyPhoto = async (req: Request, res: Response): Promise<void> => {
