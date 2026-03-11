@@ -91,6 +91,9 @@ export interface Advertisement {
   promotionType?: string;
   targetAudience?: string;
   campaignDuration?: string;
+  selectedPlan?: string;       // STANDARD | PREMIUM | EXCLUSIVE
+  selectedDuration?: string;   // DAY | WEEK | MONTH
+  selectedAddons?: string[];   // e.g. ['promo_sticker', 'emoji_title']
   
   // Stats
   viewCount: number;
@@ -272,6 +275,7 @@ export interface CreateAdvertisementDto {
   campaignDuration?: string;
   selectedPlan?: string;      // STANDARD | PREMIUM | EXCLUSIVE
   selectedDuration?: string;  // DAY | WEEK | MONTH
+  selectedAddons?: string[];  // e.g. ['promo_sticker', 'emoji_title']
   // Emoji title feature
   titleEmoji?: string;
   // Selected photos
@@ -315,7 +319,7 @@ export interface PromotionPlanFeatures {
   rotating_banner?: boolean;
   promo_tag?: boolean;
   emoji_in_title?: boolean;
-  emoji_price_per_day?: number;
+  promo_sticker_price_per_day?: number;
   position?: string;
   [key: string]: unknown;
 }

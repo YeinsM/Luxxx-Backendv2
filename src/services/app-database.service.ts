@@ -815,6 +815,9 @@ export class AppDatabaseService {
     if (ad.promotionType !== undefined) row.promotion_type = ad.promotionType;
     if (ad.targetAudience !== undefined) row.target_audience = ad.targetAudience;
     if (ad.campaignDuration !== undefined) row.campaign_duration = ad.campaignDuration;
+    if ((ad as any).selectedPlan !== undefined) row.selected_plan = (ad as any).selectedPlan;
+    if ((ad as any).selectedDuration !== undefined) row.selected_duration = (ad as any).selectedDuration;
+    if ((ad as any).selectedAddons !== undefined) row.selected_addons = (ad as any).selectedAddons;
     if ((ad as any).selectedPhotoIds !== undefined) row.selected_photo_ids = (ad as any).selectedPhotoIds;
     return row;
   }
@@ -883,6 +886,9 @@ export class AppDatabaseService {
       promotionType: data.promotion_type,
       targetAudience: data.target_audience,
       campaignDuration: data.campaign_duration,
+      selectedPlan: data.selected_plan,
+      selectedDuration: data.selected_duration,
+      selectedAddons: data.selected_addons ?? [],
       selectedPhotoIds: data.selected_photo_ids || [],
       viewCount: data.view_count || 0,
       rating: parseFloat(data.rating) || 0,
