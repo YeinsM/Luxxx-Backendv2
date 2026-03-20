@@ -11,6 +11,7 @@ import {
   updateAdminPromotionPlan,
   getAdminSettings,
   updateAdminSettings,
+  uploadBrandingLogo,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -34,6 +35,5 @@ router.put('/promotion-plans/:id', updateAdminPromotionPlan);
 
 // ── Settings ───────────────────────────────────────────────────────────
 router.get('/settings', getAdminSettings);
-router.put('/settings', updateAdminSettings);
-
+router.put('/settings', updateAdminSettings);router.post('/settings/logo', uploadBrandingLogo);
 export default router;

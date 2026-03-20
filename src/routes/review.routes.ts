@@ -14,6 +14,13 @@ const controller = new ReviewController();
 router.get('/', authMiddleware, controller.getMyReviews.bind(controller));
 
 /**
+ * @route   GET /api/reviews/authored
+ * @desc    Get reviews authored by current user
+ * @access  Private
+ */
+router.get('/authored', authMiddleware, controller.getAuthoredByMe.bind(controller));
+
+/**
  * @route   GET /api/reviews/advertisement/:id
  * @desc    Get reviews for a specific advertisement
  * @access  Public

@@ -191,12 +191,13 @@ export class AuthController {
         throw new BadRequestError('User ID not found');
       }
 
-      const { dateOfBirth, name, phone, city } = req.body;
+      const { dateOfBirth, name, phone, city, username } = req.body;
       const updates: Record<string, unknown> = {};
       if (dateOfBirth !== undefined) updates.dateOfBirth = dateOfBirth;
       if (name !== undefined) updates.name = name;
       if (phone !== undefined) updates.phone = phone;
       if (city !== undefined) updates.city = city;
+      if (username !== undefined) updates.username = username;
 
       const user = await authService.updateProfile(userId, updates as any);
       const response: ApiResponse = { success: true, data: user };

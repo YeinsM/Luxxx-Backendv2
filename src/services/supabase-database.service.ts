@@ -119,6 +119,17 @@ export class SupabaseDatabaseService implements DatabaseService {
     if ('privacyConsentAcceptedAt' in updates) serializedUpdates.privacy_consent_accepted_at = updates.privacyConsentAcceptedAt?.toISOString() || null;
     if ('softDeletedAt' in updates) serializedUpdates.soft_deleted_at = updates.softDeletedAt?.toISOString() || null;
     if ('password' in updates) serializedUpdates.password = updates.password;
+    if ('name' in updates) serializedUpdates.name = (updates as any).name || null;
+    if ('phone' in updates) serializedUpdates.phone = (updates as any).phone || null;
+    if ('city' in updates) serializedUpdates.city = (updates as any).city || null;
+    if ('age' in updates) serializedUpdates.age = (updates as any).age ?? null;
+    if ('dateOfBirth' in updates) serializedUpdates.date_of_birth = (updates as any).dateOfBirth || null;
+    if ('username' in updates) serializedUpdates.username = (updates as any).username || null;
+    if ('agencyName' in updates) serializedUpdates.agency_name = (updates as any).agencyName || null;
+    if ('clubName' in updates) serializedUpdates.club_name = (updates as any).clubName || null;
+    if ('address' in updates) serializedUpdates.address = (updates as any).address || null;
+    if ('website' in updates) serializedUpdates.website = (updates as any).website || null;
+    if ('openingHours' in updates) serializedUpdates.opening_hours = (updates as any).openingHours || null;
     
     // Add updated_at timestamp
     serializedUpdates.updated_at = new Date().toISOString();

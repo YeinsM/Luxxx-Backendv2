@@ -324,7 +324,7 @@ export class AuthService {
 
   async updateProfile(
     userId: string,
-    updates: { dateOfBirth?: string; name?: string; phone?: string; city?: string }
+    updates: { dateOfBirth?: string; name?: string; phone?: string; city?: string; username?: string }
   ): Promise<Omit<User, 'password'>> {
     const user = await this.db.getUserById(userId);
     if (!user) {
@@ -355,6 +355,17 @@ export class AuthService {
       if (user.userType === UserType.ESCORT) {
         (normalizedUpdates as EscortUser).age = computedAge;
       }
+    }
+
+    if (updates.username !== undefined) {
+      const trimmedUsername = updates.username.trim();
+      if (!trimmedUsername) {
+        throw new BadRequestError('Username is required');
+      }
+      if (trimmedUsername.length < 3) {
+        throw new BadRequestError('Username must be at least 3 characters long');
+      }
+      (normalizedUpdates as any).username = trimmedUsername;
     }
 
     const updatedUser = await this.db.updateUser(userId, normalizedUpdates);

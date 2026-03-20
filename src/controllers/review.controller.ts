@@ -30,6 +30,23 @@ export class ReviewController {
     }
   }
 
+  /** GET /api/reviews/authored — Get reviews authored by the current user */
+  async getAuthoredByMe(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const reviews = await db.getReviewsAuthoredByUser(userId);
+      const response: ApiResponse = {
+        success: true,
+        data: reviews,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** GET /api/reviews/advertisement/:id — Get reviews for a specific advertisement */
   async getByAdvertisement(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

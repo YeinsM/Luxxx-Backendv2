@@ -6,6 +6,7 @@ import { BadRequestError, NotFoundError } from "../models/error.model";
 import { getEmailService } from "../services/email.service";
 import { generateSetupToken } from "../utils/jwt.utils";
 import { config } from "../config";
+import { getCloudinaryService } from "../services/cloudinary.service";
 
 const db = getDatabaseService();
 const appDb = getAppDatabaseService();
@@ -440,7 +441,7 @@ export async function createAdmin(
 
 /**
  * GET /api/admin/settings
- * Returns admin panel settings (e.g. security_alert_email).
+ * Returns admin panel settings (branding, security config).
  */
 export async function getAdminSettings(
   req: Request,
@@ -463,6 +464,10 @@ export async function getAdminSettings(
     res.json({
       data: {
         securityAlertEmail: settings["security_alert_email"] ?? "",
+        appName:        settings["app_name"]          ?? "Luxxx",
+        appLogoUrl:     settings["app_logo_url"]      ?? "",
+        appLogoDarkUrl: settings["app_logo_dark_url"] ?? "",
+        appFaviconUrl:  settings["app_favicon_url"]   ?? "",
       },
     });
   } catch (err) {
@@ -472,7 +477,7 @@ export async function getAdminSettings(
 
 /**
  * PUT /api/admin/settings
- * Updates admin panel settings.
+ * Updates admin panel settings (security config + app name).
  */
 export async function updateAdminSettings(
   req: Request,
@@ -480,7 +485,10 @@ export async function updateAdminSettings(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const { securityAlertEmail } = req.body;
+    const { securityAlertEmail, appName } = req.body;
+    const supabase = (getDatabaseService() as any).client;
+    const now = new Date().toISOString();
+    const upserts: { key: string; value: string; updated_at: string }[] = [];
 
     if (securityAlertEmail !== undefined) {
       if (
@@ -489,20 +497,71 @@ export async function updateAdminSettings(
       ) {
         throw new BadRequestError("Email de alerta inválido");
       }
+      upserts.push({ key: "security_alert_email", value: securityAlertEmail, updated_at: now });
+    }
 
-      const supabase = (getDatabaseService() as any).client;
-      const { error } = await supabase
-        .from("admin_settings")
-        .upsert({
-          key: "security_alert_email",
-          value: securityAlertEmail,
-          updated_at: new Date().toISOString(),
-        });
+    if (appName !== undefined) {
+      const trimmed = String(appName).trim();
+      if (!trimmed) throw new BadRequestError("El nombre de la aplicación no puede estar vacío");
+      upserts.push({ key: "app_name", value: trimmed, updated_at: now });
+    }
 
+    if (upserts.length > 0) {
+      const { error } = await supabase.from("admin_settings").upsert(upserts);
       if (error) throw error;
     }
 
     res.json({ data: { updated: true } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+const VALID_LOGO_TYPES = ["logo", "logo_dark", "favicon"] as const;
+type LogoType = typeof VALID_LOGO_TYPES[number];
+const LOGO_SETTING_KEY: Record<LogoType, string> = {
+  logo:      "app_logo_url",
+  logo_dark: "app_logo_dark_url",
+  favicon:   "app_favicon_url",
+};
+
+/**
+ * POST /api/admin/settings/logo
+ * Uploads a branding image (logo / logo_dark / favicon) to Cloudinary
+ * and persists the resulting URL in admin_settings.
+ * Body: { image: string (base64), type: 'logo' | 'logo_dark' | 'favicon' }
+ */
+export async function uploadBrandingLogo(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { image, type } = req.body as { image: string; type: string };
+
+    if (!image || typeof image !== "string") {
+      throw new BadRequestError("El campo 'image' (base64) es requerido");
+    }
+    if (!VALID_LOGO_TYPES.includes(type as LogoType)) {
+      throw new BadRequestError(`'type' debe ser uno de: ${VALID_LOGO_TYPES.join(", ")}`);
+    }
+
+    const cloudinary = getCloudinaryService();
+    const result = await cloudinary.uploadBase64Image(image, {
+      folder: "luxxx/branding",
+      tags: ["branding", type],
+      transformation: { quality: "auto", format: "webp" },
+    });
+
+    const settingKey = LOGO_SETTING_KEY[type as LogoType];
+    const supabase = (getDatabaseService() as any).client;
+    const { error } = await supabase
+      .from("admin_settings")
+      .upsert({ key: settingKey, value: result.url, updated_at: new Date().toISOString() });
+
+    if (error) throw error;
+
+    res.json({ data: { url: result.url } });
   } catch (err) {
     next(err);
   }

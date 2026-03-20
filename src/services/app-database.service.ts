@@ -428,6 +428,17 @@ export class AppDatabaseService {
     return (data || []).map(this.deserializeReview);
   }
 
+  async getReviewsAuthoredByUser(userId: string): Promise<Review[]> {
+    const { data, error } = await this.client
+      .from('reviews')
+      .select('*')
+      .eq('author_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) return [];
+    return (data || []).map(this.deserializeReview);
+  }
+
   async createReview(userId: string, authorName: string, advertisementId: string, rating: number, text?: string): Promise<Review> {
     const { data, error } = await this.client
       .from('reviews')
