@@ -14,6 +14,7 @@ import zipcodeRoutes from './zipcode.routes';
 import promotionPlanRoutes from './promotion-plan.routes';
 import adminRoutes from './admin.routes';
 import adminAuthRoutes from './admin-auth.routes';
+import { getBranding } from '../controllers/admin.controller';
 import { testEmail } from '../controllers/test-email.controller';
 
 const router = Router();
@@ -42,6 +43,9 @@ router.use('/videos', videoRoutes);
 // Utilities
 router.use('/zipcode', zipcodeRoutes);
 router.use('/promotion-plans', promotionPlanRoutes);
+
+// Public branding endpoint (no auth required)
+router.get('/branding', getBranding);
 
 // Admin (public auth endpoints FIRST — before the protected /admin routes)
 router.use('/admin-auth', adminAuthRoutes);
