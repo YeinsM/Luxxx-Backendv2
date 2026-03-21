@@ -167,7 +167,23 @@ export interface Message {
   body: string;
   isRead: boolean;
   parentId?: string;
+  conversationId?: string;
   createdAt: Date;
+}
+
+export interface Conversation {
+  id: string;
+  participantAId: string;
+  participantBId: string;
+  advertisementId?: string;
+  lastMessageAt: Date;
+  createdAt: Date;
+  /** Populated on query — last message body */
+  lastMessageBody?: string;
+  /** Populated on query — count of unread messages for the requesting user */
+  unreadCount?: number;
+  /** Populated on query — other participant's display name */
+  otherParticipantName?: string;
 }
 
 export interface Notification {

@@ -1,10 +1,12 @@
 import { Router } from 'express';
 import { MessageController } from '../controllers/message.controller';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authMiddleware, requireMember } from '../middleware/auth.middleware';
 import { createMessageValidation } from '../middleware/validation.middleware';
 
 const router = Router();
 const controller = new MessageController();
+
+// ─── Legacy inbox routes ──────────────────────────────────────
 
 /**
  * @route   GET /api/messages
@@ -15,12 +17,13 @@ router.get('/', authMiddleware, controller.getInbox.bind(controller));
 
 /**
  * @route   POST /api/messages
- * @desc    Send a new message
- * @access  Private
+ * @desc    Send a new message (member only)
+ * @access  Private — member
  */
 router.post(
   '/',
   authMiddleware,
+  requireMember,
   createMessageValidation,
   controller.send.bind(controller)
 );
@@ -45,5 +48,35 @@ router.patch('/:id/read', authMiddleware, controller.markRead.bind(controller));
  * @access  Private
  */
 router.delete('/:id', authMiddleware, controller.delete.bind(controller));
+
+// ─── Conversation routes ──────────────────────────────────────
+
+/**
+ * @route   GET /api/messages/conversations
+ * @desc    List all conversations for the current user
+ * @access  Private
+ */
+router.get('/conversations', authMiddleware, controller.getConversations.bind(controller));
+
+/**
+ * @route   POST /api/messages/conversations
+ * @desc    Get or create a 1-to-1 conversation (member initiates)
+ * @access  Private — member
+ */
+router.post('/conversations', authMiddleware, requireMember, controller.getOrCreateConversation.bind(controller));
+
+/**
+ * @route   GET /api/messages/conversations/:id
+ * @desc    Get messages inside a conversation
+ * @access  Private
+ */
+router.get('/conversations/:id', authMiddleware, controller.getConversationMessages.bind(controller));
+
+/**
+ * @route   POST /api/messages/conversations/:id/messages
+ * @desc    Send a message inside a conversation
+ * @access  Private
+ */
+router.post('/conversations/:id/messages', authMiddleware, controller.sendConversationMessage.bind(controller));
 
 export default router;

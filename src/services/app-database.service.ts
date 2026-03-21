@@ -7,6 +7,7 @@ import {
   UserMedia,
   Review,
   Message,
+  Conversation,
   Notification,
   Transaction,
   Invoice,
@@ -551,6 +552,157 @@ export class AppDatabaseService {
   }
 
   // ============================================================
+  // CONVERSATIONS (1-to-1 chat)
+  // ============================================================
+
+  /** Get all conversations for a user, enriched with last message + unread count */
+  async getConversations(userId: string): Promise<Conversation[]> {
+    const { data, error } = await this.client
+      .from('conversations')
+      .select('*')
+      .or(`participant_a_id.eq.${userId},participant_b_id.eq.${userId}`)
+      .order('last_message_at', { ascending: false });
+
+    if (error) return [];
+
+    const convos = data || [];
+
+    // Enrich each conversation
+    const enriched = await Promise.all(convos.map(async (c: any) => {
+      // Last message body
+      const { data: msgs } = await this.client
+        .from('messages')
+        .select('body')
+        .eq('conversation_id', c.id)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      const lastMessageBody = msgs?.[0]?.body ?? '';
+
+      // Unread count for this user
+      const { count: unreadCount } = await this.client
+        .from('messages')
+        .select('id', { count: 'exact', head: true })
+        .eq('conversation_id', c.id)
+        .eq('to_user_id', userId)
+        .eq('is_read', false);
+
+      // Other participant id
+      const otherParticipantId = c.participant_a_id === userId ? c.participant_b_id : c.participant_a_id;
+
+      // Other participant display name from users table
+      const { data: otherUser } = await this.client
+        .from('users')
+        .select('email, name, username, agency_name, club_name')
+        .eq('id', otherParticipantId)
+        .single();
+      const otherParticipantName = otherUser
+        ? (otherUser.username || otherUser.name || otherUser.agency_name || otherUser.club_name || otherUser.email)
+        : 'Unknown';
+
+      return {
+        ...c,
+        last_message_body: lastMessageBody,
+        unread_count: unreadCount ?? 0,
+        other_participant_name: otherParticipantName,
+      };
+    }));
+
+    return enriched.map(this.deserializeConversation.bind(this));
+  }
+
+  /** Get or create a conversation between two users. Returns the conversation. */
+  async getOrCreateConversation(memberUserId: string, escortUserId: string, advertisementId?: string): Promise<Conversation> {
+    // Normalize order: always store smaller UUID as participant_a
+    const [pA, pB] = [memberUserId, escortUserId].sort();
+
+    const { data: existing } = await this.client
+      .from('conversations')
+      .select('*')
+      .eq('participant_a_id', pA)
+      .eq('participant_b_id', pB)
+      .single();
+
+    if (existing) return this.deserializeConversation(existing);
+
+    const { data, error } = await this.client
+      .from('conversations')
+      .insert([{
+        participant_a_id: pA,
+        participant_b_id: pB,
+        advertisement_id: advertisementId ?? null,
+      }])
+      .select()
+      .single();
+
+    if (error) throw new InternalServerError(`Failed to create conversation: ${error.message}`);
+    return this.deserializeConversation(data);
+  }
+
+  /** Get a conversation by ID, checking the user is a participant */
+  async getConversationById(conversationId: string, userId: string): Promise<Conversation | null> {
+    const { data, error } = await this.client
+      .from('conversations')
+      .select('*')
+      .eq('id', conversationId)
+      .or(`participant_a_id.eq.${userId},participant_b_id.eq.${userId}`)
+      .single();
+
+    if (error || !data) return null;
+    return this.deserializeConversation(data);
+  }
+
+  /** Get all messages in a conversation, marking recipient's messages as read */
+  async getConversationMessages(conversationId: string, userId: string): Promise<Message[]> {
+    const { data, error } = await this.client
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+
+    if (error) return [];
+
+    // Mark unread messages targeted at this user as read
+    await this.client
+      .from('messages')
+      .update({ is_read: true })
+      .eq('conversation_id', conversationId)
+      .eq('to_user_id', userId)
+      .eq('is_read', false);
+
+    return (data || []).map(this.deserializeMessage.bind(this));
+  }
+
+  /** Send a message inside a conversation */
+  async sendConversationMessage(conversationId: string, fromUserId: string, fromName: string, toUserId: string, body: string): Promise<Message> {
+    const { data, error } = await this.client
+      .from('messages')
+      .insert([{
+        conversation_id: conversationId,
+        from_user_id: fromUserId,
+        to_user_id: toUserId,
+        from_name: fromName,
+        subject: '',
+        body,
+        is_read: false,
+      }])
+      .select()
+      .single();
+
+    if (error) throw new InternalServerError(`Failed to send message: ${error.message}`);
+
+    // Update conversation's last_message_at
+    await this.client
+      .from('conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', conversationId);
+
+    // Notify recipient
+    await this.createNotification(toUserId, 'message', 'Nuevo mensaje', `${fromName}: ${body.substring(0, 60)}`);
+
+    return this.deserializeMessage(data);
+  }
+
+  // ============================================================
   // NOTIFICATIONS
   // ============================================================
 
@@ -949,7 +1101,22 @@ export class AppDatabaseService {
       body: data.body,
       isRead: data.is_read,
       parentId: data.parent_id,
+      conversationId: data.conversation_id,
       createdAt: new Date(data.created_at),
+    };
+  }
+
+  private deserializeConversation(data: any): Conversation {
+    return {
+      id: data.id,
+      participantAId: data.participant_a_id,
+      participantBId: data.participant_b_id,
+      advertisementId: data.advertisement_id,
+      lastMessageAt: new Date(data.last_message_at),
+      createdAt: new Date(data.created_at),
+      lastMessageBody: data.last_message_body,
+      unreadCount: data.unread_count ?? 0,
+      otherParticipantName: data.other_participant_name,
     };
   }
 

@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { ReviewController } from '../controllers/review.controller';
-import { authMiddleware } from '../middleware/auth.middleware';
+import { authMiddleware, requireMember } from '../middleware/auth.middleware';
 import { createReviewValidation } from '../middleware/validation.middleware';
 
 const router = Router();
@@ -29,12 +29,13 @@ router.get('/advertisement/:id', controller.getByAdvertisement.bind(controller))
 
 /**
  * @route   POST /api/reviews
- * @desc    Create a new review
- * @access  Private
+ * @desc    Create a new review (members only)
+ * @access  Private — member
  */
 router.post(
   '/',
   authMiddleware,
+  requireMember,
   createReviewValidation,
   controller.create.bind(controller)
 );

@@ -125,4 +125,84 @@ export class MessageController {
       next(error);
     }
   }
+
+  // ─── Conversation endpoints ────────────────────────────────
+
+  /** GET /api/messages/conversations — List conversations for the current user */
+  async getConversations(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const conversations = await db.getConversations(userId);
+      res.status(200).json({ success: true, data: conversations });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/messages/conversations
+   * Body: { escortUserId, advertisementId? }
+   * Get or create a conversation between the current user and an escort.
+   */
+  async getOrCreateConversation(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const { escortUserId, advertisementId } = req.body;
+      if (!escortUserId) throw new BadRequestError('escortUserId is required');
+
+      const conversation = await db.getOrCreateConversation(userId, escortUserId, advertisementId);
+      res.status(200).json({ success: true, data: conversation });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/messages/conversations/:id — Get messages in a conversation */
+  async getConversationMessages(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const convo = await db.getConversationById(req.params.id, userId);
+      if (!convo) throw new NotFoundError('Conversation not found');
+
+      const messages = await db.getConversationMessages(req.params.id, userId);
+      res.status(200).json({ success: true, data: messages });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/messages/conversations/:id/messages
+   * Body: { body }
+   * Send a message inside a conversation.
+   */
+  async sendConversationMessage(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const { body: messageBody } = req.body;
+      if (!messageBody?.trim()) throw new BadRequestError('Message body is required');
+
+      const convo = await db.getConversationById(req.params.id, userId);
+      if (!convo) throw new NotFoundError('Conversation not found');
+
+      const user = await userDb.getUserById(userId);
+      if (!user) throw new NotFoundError('User not found');
+
+      const fromName = (user as any).username || (user as any).name || (user as any).agencyName || (user as any).clubName || user.email;
+      const toUserId = convo.participantAId === userId ? convo.participantBId : convo.participantAId;
+
+      const message = await db.sendConversationMessage(req.params.id, userId, fromName, toUserId, messageBody.trim());
+      res.status(201).json({ success: true, data: message });
+    } catch (error) {
+      next(error);
+    }
+  }
 }
