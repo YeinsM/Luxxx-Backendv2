@@ -803,23 +803,22 @@ export class AppDatabaseService {
   // BOOST
   // ============================================================
 
-  async boostAdvertisement(adId: string, userId: string, days: number): Promise<{ boostedUntil: Date }> {
+  async boostAdvertisement(adId: string, userId: string): Promise<{ boostedAt: Date }> {
     const now = new Date();
-    const boostedUntil = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
     const { data, error } = await this.client
       .from('advertisements')
-      .update({ boosted_until: boostedUntil.toISOString() })
+      .update({ boosted_until: now.toISOString() })
       .eq('id', adId)
       .eq('user_id', userId)
       .select('boosted_until')
       .single();
 
     if (error || !data) throw new NotFoundError('Advertisement not found');
-    return { boostedUntil: new Date(data.boosted_until) };
+    return { boostedAt: new Date(data.boosted_until) };
   }
 
-  async getBoostStatus(adId: string, userId: string): Promise<{ boostedUntil: Date | null; isActive: boolean }> {
+  async getBoostStatus(adId: string, userId: string): Promise<{ boostedAt: Date | null }> {
     const { data, error } = await this.client
       .from('advertisements')
       .select('boosted_until')
@@ -828,8 +827,8 @@ export class AppDatabaseService {
       .single();
 
     if (error || !data) throw new NotFoundError('Advertisement not found');
-    const boostedUntil = data.boosted_until ? new Date(data.boosted_until) : null;
-    return { boostedUntil, isActive: !!boostedUntil && boostedUntil > new Date() };
+    const boostedAt = data.boosted_until ? new Date(data.boosted_until) : null;
+    return { boostedAt };
   }
 
   // ============================================================

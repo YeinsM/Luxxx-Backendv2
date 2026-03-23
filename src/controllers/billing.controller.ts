@@ -83,12 +83,12 @@ export class BillingController {
     }
   }
 
-  /** GET /api/billing/boost-price — Get the current boost price per day */
+  /** GET /api/billing/boost-price — Get the current boost price */
   async getBoostPrice(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const priceStr = await db.getAdminSetting('boost_price_per_day');
-      const pricePerDay = parseFloat(priceStr ?? '4.99');
-      const response: ApiResponse = { success: true, data: { pricePerDay } };
+      const price = parseFloat(priceStr ?? '4.99');
+      const response: ApiResponse = { success: true, data: { price } };
       res.status(200).json(response);
     } catch (error) {
       next(error);
@@ -109,34 +109,27 @@ export class BillingController {
     }
   }
 
-  /** POST /api/billing/boost/:adId — Boost an ad */
+  /** POST /api/billing/boost/:adId — Boost an ad (instant, last-pay wins) */
   async boost(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = (req as AuthRequest).user?.userId;
       if (!userId) throw new BadRequestError('User ID not found');
 
-      const { days } = req.body as { days: number };
-      if (!days || ![1, 3, 7].includes(Number(days))) {
-        throw new BadRequestError('days debe ser 1, 3 o 7');
-      }
-      const numDays = Number(days);
-
       const priceStr = await db.getAdminSetting('boost_price_per_day');
-      const pricePerDay = parseFloat(priceStr ?? '4.99');
-      const totalCost = pricePerDay * numDays;
+      const cost = parseFloat(priceStr ?? '4.99');
 
       const balance = await db.getBalance(userId);
-      if (balance.totalBalance < totalCost) {
-        throw new BadRequestError(`Saldo insuficiente. Necesitas €${totalCost.toFixed(2)} y tienes €${balance.totalBalance.toFixed(2)}`);
+      if (balance.totalBalance < cost) {
+        throw new BadRequestError(`Saldo insuficiente. Necesitas €${cost.toFixed(2)} y tienes €${balance.totalBalance.toFixed(2)}`);
       }
 
-      await db.addTransaction(userId, 'expense', `Impulsar anuncio - ${numDays} día(s)`, totalCost);
-      const { boostedUntil } = await db.boostAdvertisement(req.params.adId, userId, numDays);
+      await db.addTransaction(userId, 'expense', 'Impulsar anuncio', cost);
+      const { boostedAt } = await db.boostAdvertisement(req.params.adId, userId);
       const newBalance = await db.getBalance(userId);
 
       const response: ApiResponse = {
         success: true,
-        data: { boostedUntil, cost: totalCost, pricePerDay, days: numDays, newBalance: newBalance.totalBalance },
+        data: { boostedAt, cost, newBalance: newBalance.totalBalance },
       };
       res.status(200).json(response);
     } catch (error) {
