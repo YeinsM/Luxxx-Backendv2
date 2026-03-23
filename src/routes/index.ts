@@ -16,6 +16,13 @@ import adminRoutes from './admin.routes';
 import adminAuthRoutes from './admin-auth.routes';
 import { getBranding } from '../controllers/admin.controller';
 import { testEmail } from '../controllers/test-email.controller';
+import { authMiddleware } from '../middleware/auth.middleware';
+import { sseService } from '../utils/sse';
+import { Request, Response } from 'express';
+
+interface AuthRequest extends Request {
+  user?: { userId: string; email: string; userType: string };
+}
 
 const router = Router();
 
@@ -53,6 +60,17 @@ router.use('/admin', adminRoutes);
 
 // Test email endpoint
 router.post('/test-email', testEmail);
+
+// SSE — real-time push notifications
+router.get('/sse/stream', authMiddleware, (req: Request, res: Response) => {
+  const userId = (req as AuthRequest).user?.userId;
+  if (!userId) { res.status(401).end(); return; }
+
+  sseService.addClient(userId, res);
+
+  req.on('close', () => sseService.removeClient(userId, res));
+  req.on('end', () => sseService.removeClient(userId, res));
+});
 
 // Health check endpoint
 router.get('/health', (_req, res) => {

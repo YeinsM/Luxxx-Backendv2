@@ -8,6 +8,7 @@ import {
   deleteMyPhoto,
   deleteMyVideo,
   uploadVerificationPhoto,
+  getMyPhotoVerifications,
 } from '../controllers/profile-media.controller';
 
 const router = Router();
@@ -60,5 +61,12 @@ router.delete('/photos', authMiddleware, deleteMyPhoto);
  * @access  Private
  */
 router.delete('/videos', authMiddleware, deleteMyVideo);
+
+/**
+ * @route   GET /api/profile/media/photo-verifications
+ * @desc    Get current user's photo verification statuses
+ * @access  Private
+ */
+router.get('/photo-verifications', authMiddleware, getMyPhotoVerifications);
 
 export default router;

@@ -12,17 +12,23 @@ export const authMiddleware = async (
 ): Promise<void> => {
   try {
     const authHeader = req.headers.authorization;
+    // Also accept token from query string (needed for EventSource / SSE)
+    const queryToken = req.query.token as string | undefined;
 
-    if (!authHeader) {
+    if (!authHeader && !queryToken) {
       throw new UnauthorizedError('No token provided');
     }
 
-    const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      throw new UnauthorizedError('Invalid token format');
+    let token: string;
+    if (authHeader) {
+      const parts = authHeader.split(' ');
+      if (parts.length !== 2 || parts[0] !== 'Bearer') {
+        throw new UnauthorizedError('Invalid token format');
+      }
+      token = parts[1];
+    } else {
+      token = queryToken!;
     }
-
-    const token = parts[1];
     const decoded = verifyToken(token);
 
     const user = await db.getUserById(decoded.userId);

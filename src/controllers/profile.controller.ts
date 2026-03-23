@@ -50,6 +50,17 @@ export class ProfileController {
     }
   }
 
+  /** GET /api/profiles/cities — Get distinct cities from active profiles */
+  async cities(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const cities = await db.getCities();
+      const response: ApiResponse = { success: true, data: { cities } };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** GET /api/profiles/:id — Get profile by ID */
   async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

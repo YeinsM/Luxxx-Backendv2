@@ -12,6 +12,10 @@ import {
   getAdminSettings,
   updateAdminSettings,
   uploadBrandingLogo,
+  listPhotoVerifications,
+  updatePhotoVerification,
+  getBoostSettings,
+  updateBoostSettings,
 } from '../controllers/admin.controller';
 
 const router = Router();
@@ -36,6 +40,14 @@ router.put('/promotion-plans/:id', updateAdminPromotionPlan);
 // ── Settings ───────────────────────────────────────────────────────────
 router.get('/settings', getAdminSettings);
 router.put('/settings', updateAdminSettings);
+
+// ── Boost settings ─────────────────────────────────────────────────────
+router.get('/settings/boost', getBoostSettings);
+router.patch('/settings/boost', updateBoostSettings);
+
+// ── Photo verifications ────────────────────────────────────────────────
+router.get('/photo-verifications', listPhotoVerifications);
+router.patch('/photo-verifications/:id', updatePhotoVerification);
 
 // ── Branding ───────────────────────────────────────────────────────────
 router.post('/branding/upload-logo', uploadBrandingLogo);

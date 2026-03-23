@@ -626,3 +626,93 @@ export async function getBranding(
     next(err);
   }
 }
+
+/**
+ * GET /api/admin/photo-verifications
+ * Returns photo verifications with optional status filter.
+ * Query: ?status=PENDING|VERIFIED|REJECTED&page=1&limit=20
+ */
+export async function listPhotoVerifications(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const status = req.query.status as string | undefined;
+
+    const validStatuses = ['PENDING', 'VERIFIED', 'REJECTED'];
+    const statusFilter = status && validStatuses.includes(status) ? status : undefined;
+
+    const result = await appDb.getAllPhotoVerifications(page, limit, statusFilter);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /api/admin/photo-verifications/:id
+ * Approve or reject a photo verification.
+ * Body: { status: 'VERIFIED' | 'REJECTED', adminComment?: string }
+ */
+export async function updatePhotoVerification(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { status, adminComment } = req.body as { status: string; adminComment?: string };
+
+    if (!status || !['VERIFIED', 'REJECTED'].includes(status)) {
+      throw new BadRequestError("status debe ser 'VERIFIED' o 'REJECTED'");
+    }
+
+    const updated = await appDb.updatePhotoVerificationStatus(id, status as 'VERIFIED' | 'REJECTED', adminComment);
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * GET /api/admin/settings/boost
+ * Returns the current boost price per day.
+ */
+export async function getBoostSettings(
+  _req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const priceStr = await appDb.getAdminSetting('boost_price_per_day');
+    const pricePerDay = parseFloat(priceStr ?? '4.99');
+    res.json({ success: true, data: { pricePerDay } });
+  } catch (err) {
+    next(err);
+  }
+}
+
+/**
+ * PATCH /api/admin/settings/boost
+ * Updates the boost price per day.
+ * Body: { pricePerDay: number }
+ */
+export async function updateBoostSettings(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    const { pricePerDay } = req.body as { pricePerDay: number };
+    if (!pricePerDay || isNaN(Number(pricePerDay)) || Number(pricePerDay) <= 0) {
+      throw new BadRequestError('pricePerDay debe ser un número positivo');
+    }
+    await appDb.setAdminSetting('boost_price_per_day', String(Number(pricePerDay).toFixed(2)));
+    res.json({ success: true, data: { pricePerDay: Number(pricePerDay) } });
+  } catch (err) {
+    next(err);
+  }
+}

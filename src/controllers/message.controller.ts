@@ -200,6 +200,16 @@ export class MessageController {
       const toUserId = convo.participantAId === userId ? convo.participantBId : convo.participantAId;
 
       const message = await db.sendConversationMessage(req.params.id, userId, fromName, toUserId, messageBody.trim());
+
+      // Push real-time notification to recipient
+      const { sseService } = await import('../utils/sse.js');
+      sseService.emit(toUserId, 'new_message', {
+        conversationId: req.params.id,
+        message,
+        fromName,
+        fromUserId: userId,
+      });
+
       res.status(201).json({ success: true, data: message });
     } catch (error) {
       next(error);

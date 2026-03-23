@@ -107,6 +107,10 @@ export interface Advertisement {
   // Selected photos (URLs of photos the escort chose to show on their ad)
   selectedPhotoIds?: string[];
 
+  // Boost / plan positioning
+  planPriority?: number;       // 0=none, 1=STANDARD, 2=PREMIUM, 3=EXCLUSIVE
+  boostedUntil?: Date;         // Non-null and future = active boost
+
   // Joined data (not stored in advertisements table)
   services?: AdvertisementService[];
   rates?: AdvertisementRate[];
@@ -218,6 +222,18 @@ export interface Invoice {
   paidAt?: Date;
   pdfUrl?: string;
   createdAt: Date;
+}
+
+export interface PhotoVerification {
+  id: string;
+  advertisementId: string;
+  userId: string;
+  photoUrl: string;
+  publicId: string;
+  status: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  adminComment?: string;
+  createdAt: Date;
+  reviewedAt?: Date;
 }
 
 export interface SavedSearch {

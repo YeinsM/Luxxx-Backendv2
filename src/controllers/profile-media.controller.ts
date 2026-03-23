@@ -106,9 +106,20 @@ export const uploadMyPhotos = async (req: Request, res: Response): Promise<void>
       newPhotos.push(media);
     }
 
+    // If the user already has a published ad, submit new photos for verification
+    const existingAd = await db.getAdvertisementByUserId(userId);
+    if (existingAd && existingAd.isOnline) {
+      await db.submitPhotosForVerification(
+        existingAd.id,
+        userId,
+        newPhotos.map(p => ({ url: p.url, publicId: p.publicId }))
+      );
+    }
+
     res.status(200).json({
       message: `${newPhotos.length} photos uploaded successfully`,
       data: newPhotos,
+      pendingVerification: !!(existingAd && existingAd.isOnline),
     });
   } catch (error: any) {
     console.error('Upload photos error:', error);
@@ -282,5 +293,19 @@ export const deleteMyVideo = async (req: Request, res: Response): Promise<void> 
   } catch (error: any) {
     console.error('Delete video error:', error);
     res.status(500).json({ error: error.message || 'Failed to delete video' });
+  }
+};
+
+/** GET /api/profile/media/photo-verifications — User's own photo verification statuses */
+export const getMyPhotoVerifications = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as AuthRequest).user?.userId;
+    if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+    const verifications = await db.getPhotoVerificationsForUser(userId);
+    res.status(200).json({ success: true, data: verifications });
+  } catch (error: any) {
+    console.error('Get photo verifications error:', error);
+    res.status(500).json({ error: error.message || 'Failed to get photo verifications' });
   }
 };

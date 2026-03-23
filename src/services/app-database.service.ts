@@ -12,6 +12,7 @@ import {
   Transaction,
   Invoice,
   SavedSearch,
+  PhotoVerification,
   CreateAdvertisementDto,
   ProfileSearchParams,
   PromotionPlan,
@@ -258,16 +259,27 @@ export class AppDatabaseService {
       q = q.or(`name.ilike.%${query}%,description.ilike.%${query}%,title.ilike.%${query}%`);
     }
 
-    // Sorting
+    // Sorting: plan tier (EXCLUSIVE→PREMIUM→STANDARD) is always the primary sort.
+    // Within each tier, boosted ads (boosted_until in the future) come first.
     switch (sortBy) {
       case 'rating':
-        q = q.order('rating', { ascending: false });
+        q = q
+          .order('plan_priority', { ascending: false })
+          .order('boosted_until', { ascending: false, nullsFirst: false })
+          .order('rating', { ascending: false });
         break;
       case 'newest':
-        q = q.order('created_at', { ascending: false });
+        q = q
+          .order('plan_priority', { ascending: false })
+          .order('boosted_until', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false });
         break;
       default:
-        q = q.order('is_premium', { ascending: false }).order('promoted_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false });
+        q = q
+          .order('plan_priority', { ascending: false })
+          .order('boosted_until', { ascending: false, nullsFirst: false })
+          .order('promoted_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false });
     }
 
     q = q.range(offset, offset + limit - 1);
@@ -331,6 +343,21 @@ export class AppDatabaseService {
       avgRating: Math.round(avgRating * 10) / 10,
       byCategory,
     };
+  }
+
+  /** Returns distinct, non-null city names from active advertisements, sorted alphabetically */
+  async getCities(): Promise<string[]> {
+    const { data, error } = await this.client
+      .from('advertisements')
+      .select('city')
+      .eq('is_online', true)
+      .not('city', 'is', null);
+
+    if (error) throw new InternalServerError(`Failed to get cities: ${error.message}`);
+
+    const cities = [...new Set((data || []).map((r: any) => (r.city as string).trim()).filter(Boolean))];
+    cities.sort((a, b) => a.localeCompare(b));
+    return cities;
   }
 
   async incrementViewCount(id: string): Promise<void> {
@@ -753,6 +780,135 @@ export class AppDatabaseService {
   }
 
   // ============================================================
+  // ADMIN SETTINGS
+  // ============================================================
+
+  async getAdminSetting(key: string): Promise<string | null> {
+    const { data, error } = await this.client
+      .from('admin_settings')
+      .select('value')
+      .eq('key', key)
+      .single();
+    if (error || !data) return null;
+    return data.value;
+  }
+
+  async setAdminSetting(key: string, value: string): Promise<void> {
+    await this.client
+      .from('admin_settings')
+      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  }
+
+  // ============================================================
+  // BOOST
+  // ============================================================
+
+  async boostAdvertisement(adId: string, userId: string, days: number): Promise<{ boostedUntil: Date }> {
+    const now = new Date();
+    const boostedUntil = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const { data, error } = await this.client
+      .from('advertisements')
+      .update({ boosted_until: boostedUntil.toISOString() })
+      .eq('id', adId)
+      .eq('user_id', userId)
+      .select('boosted_until')
+      .single();
+
+    if (error || !data) throw new NotFoundError('Advertisement not found');
+    return { boostedUntil: new Date(data.boosted_until) };
+  }
+
+  async getBoostStatus(adId: string, userId: string): Promise<{ boostedUntil: Date | null; isActive: boolean }> {
+    const { data, error } = await this.client
+      .from('advertisements')
+      .select('boosted_until')
+      .eq('id', adId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !data) throw new NotFoundError('Advertisement not found');
+    const boostedUntil = data.boosted_until ? new Date(data.boosted_until) : null;
+    return { boostedUntil, isActive: !!boostedUntil && boostedUntil > new Date() };
+  }
+
+  // ============================================================
+  // PHOTO VERIFICATIONS
+  // ============================================================
+
+  async submitPhotosForVerification(adId: string, userId: string, photos: Array<{ url: string; publicId: string }>): Promise<void> {
+    if (photos.length === 0) return;
+    const rows = photos.map(p => ({
+      advertisement_id: adId,
+      user_id: userId,
+      photo_url: p.url,
+      public_id: p.publicId,
+      status: 'PENDING',
+    }));
+    await this.client.from('photo_verifications').upsert(rows, { onConflict: 'public_id', ignoreDuplicates: true });
+  }
+
+  async getPhotoVerificationsForUser(userId: string): Promise<PhotoVerification[]> {
+    const { data, error } = await this.client
+      .from('photo_verifications')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+    if (error) return [];
+    return (data || []).map(this.deserializePhotoVerification);
+  }
+
+  async getPendingPhotoVerifications(page = 1, limit = 20): Promise<{ data: PhotoVerification[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const { data, error, count } = await this.client
+      .from('photo_verifications')
+      .select('*', { count: 'exact' })
+      .eq('status', 'PENDING')
+      .order('created_at', { ascending: true })
+      .range(offset, offset + limit - 1);
+    if (error) return { data: [], total: 0 };
+    return { data: (data || []).map(this.deserializePhotoVerification), total: count || 0 };
+  }
+
+  async getAllPhotoVerifications(page = 1, limit = 20, status?: string): Promise<{ data: PhotoVerification[]; total: number }> {
+    const offset = (page - 1) * limit;
+    let q = this.client
+      .from('photo_verifications')
+      .select('*', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (status && status !== 'ALL') q = q.eq('status', status);
+    const { data, error, count } = await q;
+    if (error) return { data: [], total: 0 };
+    return { data: (data || []).map(this.deserializePhotoVerification), total: count || 0 };
+  }
+
+  async updatePhotoVerificationStatus(id: string, status: 'VERIFIED' | 'REJECTED', adminComment?: string): Promise<PhotoVerification> {
+    const { data, error } = await this.client
+      .from('photo_verifications')
+      .update({ status, admin_comment: adminComment || null, reviewed_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    if (error || !data) throw new NotFoundError('Photo verification not found');
+    return this.deserializePhotoVerification(data);
+  }
+
+  private deserializePhotoVerification(data: any): PhotoVerification {
+    return {
+      id: data.id,
+      advertisementId: data.advertisement_id,
+      userId: data.user_id,
+      photoUrl: data.photo_url,
+      publicId: data.public_id,
+      status: data.status,
+      adminComment: data.admin_comment,
+      createdAt: new Date(data.created_at),
+      reviewedAt: data.reviewed_at ? new Date(data.reviewed_at) : undefined,
+    };
+  }
+
+  // ============================================================
   // BILLING - TRANSACTIONS
   // ============================================================
 
@@ -978,10 +1134,18 @@ export class AppDatabaseService {
     if (ad.promotionType !== undefined) row.promotion_type = ad.promotionType;
     if (ad.targetAudience !== undefined) row.target_audience = ad.targetAudience;
     if (ad.campaignDuration !== undefined) row.campaign_duration = ad.campaignDuration;
-    if ((ad as any).selectedPlan !== undefined) row.selected_plan = (ad as any).selectedPlan;
+    if ((ad as any).selectedPlan !== undefined) {
+      row.selected_plan = (ad as any).selectedPlan;
+      // Keep plan_priority in sync whenever selected_plan changes
+      row.plan_priority = (ad as any).selectedPlan === 'EXCLUSIVE' ? 3
+        : (ad as any).selectedPlan === 'PREMIUM' ? 2
+        : (ad as any).selectedPlan === 'STANDARD' ? 1
+        : 0;
+    }
     if ((ad as any).selectedDuration !== undefined) row.selected_duration = (ad as any).selectedDuration;
     if ((ad as any).selectedAddons !== undefined) row.selected_addons = (ad as any).selectedAddons;
     if ((ad as any).selectedPhotoIds !== undefined) row.selected_photo_ids = (ad as any).selectedPhotoIds;
+    if ((ad as any).boostedUntil !== undefined) row.boosted_until = (ad as any).boostedUntil ? new Date((ad as any).boostedUntil).toISOString() : null;
     return row;
   }
 
@@ -1053,6 +1217,8 @@ export class AppDatabaseService {
       selectedDuration: data.selected_duration,
       selectedAddons: data.selected_addons ?? [],
       selectedPhotoIds: data.selected_photo_ids || [],
+      planPriority: data.plan_priority ?? 0,
+      boostedUntil: data.boosted_until ? new Date(data.boosted_until) : undefined,
       viewCount: data.view_count || 0,
       rating: parseFloat(data.rating) || 0,
       reviewCount: data.review_count || 0,

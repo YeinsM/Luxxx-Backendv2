@@ -40,4 +40,25 @@ router.get('/invoices/:id/download', authMiddleware, controller.downloadInvoice.
  */
 router.post('/credits/purchase', authMiddleware, controller.purchaseCredits.bind(controller));
 
+/**
+ * @route   GET /api/billing/boost-price
+ * @desc    Get the current boost price per day (no adId required)
+ * @access  Private
+ */
+router.get('/boost-price', authMiddleware, controller.getBoostPrice.bind(controller));
+
+/**
+ * @route   GET /api/billing/boost/:adId
+ * @desc    Get boost status for an advertisement
+ * @access  Private
+ */
+router.get('/boost/:adId', authMiddleware, controller.getBoostStatus.bind(controller));
+
+/**
+ * @route   POST /api/billing/boost/:adId
+ * @desc    Boost an advertisement to top of category
+ * @access  Private
+ */
+router.post('/boost/:adId', authMiddleware, controller.boost.bind(controller));
+
 export default router;

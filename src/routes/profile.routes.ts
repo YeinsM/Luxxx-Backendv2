@@ -19,6 +19,13 @@ router.get('/', controller.search.bind(controller));
 router.get('/stats', controller.stats.bind(controller));
 
 /**
+ * @route   GET /api/profiles/cities
+ * @desc    Get distinct city names from active profiles
+ * @access  Public
+ */
+router.get('/cities', controller.cities.bind(controller));
+
+/**
  * @route   GET /api/profiles/:id
  * @desc    Get a single profile by advertisement ID
  * @access  Public
