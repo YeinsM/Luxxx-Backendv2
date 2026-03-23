@@ -468,6 +468,8 @@ export async function getAdminSettings(
         appLogoUrl: settings["app_logo_url"] ?? "",
         appLogoDarkUrl: settings["app_logo_dark_url"] ?? "",
         appFaviconUrl: settings["app_favicon_url"] ?? "",
+        themeColorFrom: settings["theme_color_from"] ?? "",
+        themeColorTo: settings["theme_color_to"] ?? "",
       },
     });
   } catch (err) {
@@ -485,7 +487,7 @@ export async function updateAdminSettings(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const { securityAlertEmail, appName, appLogoUrl, appLogoDarkUrl, appFaviconUrl } = req.body;
+    const { securityAlertEmail, appName, appLogoUrl, appLogoDarkUrl, appFaviconUrl, themeColorFrom, themeColorTo } = req.body;
 
     const supabase = (getDatabaseService() as any).client;
     const now = new Date().toISOString();
@@ -519,6 +521,18 @@ export async function updateAdminSettings(
     }
     if (appFaviconUrl !== undefined) {
       upserts.push({ key: "app_favicon_url", value: appFaviconUrl, updated_at: now });
+    }
+    if (themeColorFrom !== undefined) {
+      if (themeColorFrom !== "" && !/^#[0-9a-fA-F]{3,8}$/.test(themeColorFrom)) {
+        throw new BadRequestError("Color inicial inválido (formato hexadecimal requerido: #rrggbb)");
+      }
+      upserts.push({ key: "theme_color_from", value: themeColorFrom, updated_at: now });
+    }
+    if (themeColorTo !== undefined) {
+      if (themeColorTo !== "" && !/^#[0-9a-fA-F]{3,8}$/.test(themeColorTo)) {
+        throw new BadRequestError("Color final inválido (formato hexadecimal requerido: #rrggbb)");
+      }
+      upserts.push({ key: "theme_color_to", value: themeColorTo, updated_at: now });
     }
 
     if (upserts.length > 0) {
@@ -605,7 +619,7 @@ export async function getBranding(
     const { data, error } = await supabase
       .from("admin_settings")
       .select("key, value")
-      .in("key", ["app_name", "app_logo_url", "app_logo_dark_url", "app_favicon_url"]);
+      .in("key", ["app_name", "app_logo_url", "app_logo_dark_url", "app_favicon_url", "theme_color_from", "theme_color_to"]);
 
     if (error) throw error;
 
@@ -620,6 +634,8 @@ export async function getBranding(
         appLogoUrl: settings["app_logo_url"] ?? "",
         appLogoDarkUrl: settings["app_logo_dark_url"] ?? "",
         appFaviconUrl: settings["app_favicon_url"] ?? "",
+        themeColorFrom: settings["theme_color_from"] ?? "",
+        themeColorTo: settings["theme_color_to"] ?? "",
       },
     });
   } catch (err) {
