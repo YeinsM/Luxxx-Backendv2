@@ -472,6 +472,7 @@ export async function getAdminSettings(
         appFaviconUrl: settings["app_favicon_url"] ?? "",
         themeColorFrom: settings["theme_color_from"] ?? "",
         themeColorTo: settings["theme_color_to"] ?? "",
+        topbarBgImage: settings["topbar_bg_image"] ?? "",
       },
     });
   } catch (err) {
@@ -489,7 +490,7 @@ export async function updateAdminSettings(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const { securityAlertEmail, appName, appLogoUrl, appLogoDarkUrl, appFaviconUrl, themeColorFrom, themeColorTo } = req.body;
+    const { securityAlertEmail, appName, appLogoUrl, appLogoDarkUrl, appFaviconUrl, themeColorFrom, themeColorTo, topbarBgImage } = req.body;
 
     const supabase = (getDatabaseService() as any).client;
     const now = new Date().toISOString();
@@ -536,6 +537,9 @@ export async function updateAdminSettings(
       }
       upserts.push({ key: "theme_color_to", value: themeColorTo, updated_at: now });
     }
+    if (topbarBgImage !== undefined) {
+      upserts.push({ key: "topbar_bg_image", value: topbarBgImage, updated_at: now });
+    }
 
     if (upserts.length > 0) {
       const { error } = await supabase.from("admin_settings").upsert(upserts);
@@ -566,15 +570,16 @@ export async function uploadBrandingLogo(
       throw new BadRequestError("Se requiere una imagen en base64");
     }
 
-    const validTypes = ["logo", "logo_dark", "favicon"] as const;
+    const validTypes = ["logo", "logo_dark", "favicon", "topbar"] as const;
     if (!validTypes.includes(type)) {
-      throw new BadRequestError("type debe ser 'logo', 'logo_dark' o 'favicon'");
+      throw new BadRequestError("type debe ser 'logo', 'logo_dark', 'favicon' o 'topbar'");
     }
 
     const keyMap: Record<string, string> = {
       logo: "app_logo_url",
       logo_dark: "app_logo_dark_url",
       favicon: "app_favicon_url",
+      topbar: "topbar_bg_image",
     };
 
     const cloudinary = getCloudinaryService();
@@ -583,6 +588,8 @@ export async function uploadBrandingLogo(
       tags: ["branding", type],
       transformation: type === "favicon"
         ? { width: 192, height: 192, crop: "fill", format: "png" }
+        : type === "topbar"
+        ? { quality: "auto", format: "webp" }
         : { quality: "auto", format: "webp" },
     });
 
@@ -621,7 +628,7 @@ export async function getBranding(
     const { data, error } = await supabase
       .from("admin_settings")
       .select("key, value")
-      .in("key", ["app_name", "app_logo_url", "app_logo_dark_url", "app_favicon_url", "theme_color_from", "theme_color_to"]);
+      .in("key", ["app_name", "app_logo_url", "app_logo_dark_url", "app_favicon_url", "theme_color_from", "theme_color_to", "topbar_bg_image"]);
 
     if (error) throw error;
 
@@ -638,6 +645,7 @@ export async function getBranding(
         appFaviconUrl: settings["app_favicon_url"] ?? "",
         themeColorFrom: settings["theme_color_from"] ?? "",
         themeColorTo: settings["theme_color_to"] ?? "",
+        topbarBgImage: settings["topbar_bg_image"] ?? "",
       },
     });
   } catch (err) {
