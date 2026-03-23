@@ -412,10 +412,12 @@ export async function createAdmin(
 
     // Send invitation email with one-time setup link
     const setupToken = generateSetupToken(newId, normalizedEmail);
-    const frontendUrl =
-      (config as any).email?.frontendUrl ??
-      process.env.FRONTEND_URL ??
-      "http://localhost:3000";
+    // Prefer the configured FRONTEND_URL; fall back to the Origin header of the
+    // current request so the link works even when the env var is not set on Render.
+    const configuredUrl = (config as any).email?.frontendUrl ?? process.env.FRONTEND_URL ?? '';
+    const isLocalhost = !configuredUrl || configuredUrl.includes('localhost') || configuredUrl.includes('127.0.0.1');
+    const requestOrigin = req.headers.origin || req.headers.referer?.replace(/\/$/, '').split('/').slice(0, 3).join('/');
+    const frontendUrl = (isLocalhost && requestOrigin) ? requestOrigin : (configuredUrl || 'http://localhost:3000');
     const setupLink = `${frontendUrl}/admin-login?setup=${setupToken}`;
     await getEmailService().sendAdminInvitationEmail(
       normalizedEmail,
