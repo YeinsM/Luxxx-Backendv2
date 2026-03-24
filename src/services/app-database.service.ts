@@ -94,7 +94,11 @@ export class AppDatabaseService {
     ad.photos = ad.selectedPhotoIds && ad.selectedPhotoIds.length > 0
       ? allPhotos.filter(p => (ad.selectedPhotoIds as string[]).includes(p.url))
       : allPhotos;
-    ad.videos = await this.getUserMedia(ad.userId, 'video');
+    const allVideos = await this.getUserMedia(ad.userId, 'video');
+    // Filter to only selected videos for public view
+    ad.videos = ad.selectedVideoIds && ad.selectedVideoIds.length > 0
+      ? allVideos.filter(v => (ad.selectedVideoIds as string[]).includes(v.url))
+      : allVideos;
     return ad;
   }
 
@@ -1144,6 +1148,7 @@ export class AppDatabaseService {
     if ((ad as any).selectedDuration !== undefined) row.selected_duration = (ad as any).selectedDuration;
     if ((ad as any).selectedAddons !== undefined) row.selected_addons = (ad as any).selectedAddons;
     if ((ad as any).selectedPhotoIds !== undefined) row.selected_photo_ids = (ad as any).selectedPhotoIds;
+    if ((ad as any).selectedVideoIds !== undefined) row.selected_video_ids = (ad as any).selectedVideoIds;
     if ((ad as any).boostedUntil !== undefined) row.boosted_until = (ad as any).boostedUntil ? new Date((ad as any).boostedUntil).toISOString() : null;
     return row;
   }
@@ -1216,6 +1221,7 @@ export class AppDatabaseService {
       selectedDuration: data.selected_duration,
       selectedAddons: data.selected_addons ?? [],
       selectedPhotoIds: data.selected_photo_ids || [],
+      selectedVideoIds: data.selected_video_ids || [],
       planPriority: data.plan_priority ?? 0,
       boostedUntil: data.boosted_until ? new Date(data.boosted_until) : undefined,
       viewCount: data.view_count || 0,

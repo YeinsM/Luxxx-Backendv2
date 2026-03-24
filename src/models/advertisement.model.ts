@@ -107,6 +107,9 @@ export interface Advertisement {
   // Selected photos (URLs of photos the escort chose to show on their ad)
   selectedPhotoIds?: string[];
 
+  // Selected videos (URLs of videos the escort chose to show on their ad)
+  selectedVideoIds?: string[];
+
   // Boost / plan positioning
   planPriority?: number;       // 0=none, 1=STANDARD, 2=PREMIUM, 3=EXCLUSIVE
   boostedUntil?: Date;         // Non-null and future = active boost
@@ -312,6 +315,8 @@ export interface CreateAdvertisementDto {
   titleEmoji?: string;
   // Selected photos
   selectedPhotoIds?: string[];
+  // Selected videos
+  selectedVideoIds?: string[];
   // Related data
   services?: Array<{ serviceName: string; price?: number; notes?: string }>;
   rates?: Array<{ timeLabel: string; incallPrice?: string; outcallPrice?: string }>;
