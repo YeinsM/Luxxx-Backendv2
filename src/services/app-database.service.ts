@@ -22,6 +22,7 @@ import {
 } from '../models/advertisement.model';
 import { InternalServerError, NotFoundError } from '../models/error.model';
 import { normalizeAdvertisementGender } from '../utils/gender.utils';
+import { sseService } from '../utils/sse';
 
 type PromotionVideoOwner = {
   advertisementId: string;
@@ -1032,7 +1033,13 @@ export class AppDatabaseService {
       .eq('id', conversationId);
 
     // Notify recipient
-    await this.createNotification(toUserId, 'message', 'Nuevo mensaje', `${fromName}: ${body.substring(0, 60)}`);
+    await this.createNotification(
+      toUserId,
+      'message',
+      'Nuevo mensaje',
+      `${fromName}: ${body.substring(0, 60)}`,
+      conversationId,
+    );
 
     return this.deserializeMessage(data);
   }
@@ -1066,7 +1073,11 @@ export class AppDatabaseService {
       .single();
 
     if (error) throw new InternalServerError(`Failed to create notification: ${error.message}`);
-    return this.deserializeNotification(data);
+
+    const notification = this.deserializeNotification(data);
+    sseService.emit(userId, 'new_notification', notification);
+
+    return notification;
   }
 
   async markNotificationRead(id: string, userId: string): Promise<boolean> {
