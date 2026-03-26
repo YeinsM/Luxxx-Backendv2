@@ -10,6 +10,13 @@ import {
   uploadVerificationPhoto,
   getMyPhotoVerifications,
 } from '../controllers/profile-media.controller';
+import {
+  getMyPromotionVideos,
+  getMyPromotionVideoStats,
+  uploadMyPromotionVideos,
+  updateMyPromotionVideo,
+  deleteMyPromotionVideo,
+} from '../controllers/promotion-video.controller';
 
 const router = Router();
 
@@ -49,6 +56,34 @@ router.post('/verification-photos', authMiddleware, uploadVerificationPhoto);
 router.post('/videos', authMiddleware, uploadMyVideos);
 
 /**
+ * @route   GET /api/profile/media/promotion-videos
+ * @desc    Get current user's promotion videos
+ * @access  Private
+ */
+router.get('/promotion-videos', authMiddleware, getMyPromotionVideos);
+
+/**
+ * @route   GET /api/profile/media/promotion-videos/stats
+ * @desc    Get current user's promotion video stats
+ * @access  Private
+ */
+router.get('/promotion-videos/stats', authMiddleware, getMyPromotionVideoStats);
+
+/**
+ * @route   POST /api/profile/media/promotion-videos
+ * @desc    Upload promotion videos (base64)
+ * @access  Private
+ */
+router.post('/promotion-videos', authMiddleware, uploadMyPromotionVideos);
+
+/**
+ * @route   PATCH /api/profile/media/promotion-videos/:id
+ * @desc    Update a promotion video
+ * @access  Private
+ */
+router.patch('/promotion-videos/:id', authMiddleware, updateMyPromotionVideo);
+
+/**
  * @route   DELETE /api/profile/media/photos
  * @desc    Delete a photo (body: { publicId })
  * @access  Private
@@ -61,6 +96,13 @@ router.delete('/photos', authMiddleware, deleteMyPhoto);
  * @access  Private
  */
 router.delete('/videos', authMiddleware, deleteMyVideo);
+
+/**
+ * @route   DELETE /api/profile/media/promotion-videos/:id
+ * @desc    Delete a promotion video
+ * @access  Private
+ */
+router.delete('/promotion-videos/:id', authMiddleware, deleteMyPromotionVideo);
 
 /**
  * @route   GET /api/profile/media/photo-verifications

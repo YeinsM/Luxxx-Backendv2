@@ -9,12 +9,13 @@ export class ProfileController {
   /** GET /api/profiles — Search/list profiles */
   async search(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { category, city, query, sortBy, page, limit } = req.query;
+      const { category, city, query, gender, sortBy, page, limit } = req.query;
 
       const result = await db.searchProfiles({
         category: category as string,
         city: city as string,
         query: query as string,
+        gender: gender as string,
         sortBy: sortBy as any,
         page: page ? parseInt(page as string) : 1,
         limit: limit ? parseInt(limit as string) : 20,

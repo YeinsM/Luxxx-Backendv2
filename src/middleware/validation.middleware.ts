@@ -1,4 +1,5 @@
 import { body } from 'express-validator';
+import { normalizeAdvertisementGender } from '../utils/gender.utils';
 
 export const registerEscortValidation = [
   body('name')
@@ -130,6 +131,15 @@ export const resetPasswordValidation = [
 
 const advertisementOptionalFields = [
   body('category').optional().trim(),
+  body('gender')
+    .optional()
+    .custom((value: string | undefined) => {
+      if (!value) return true;
+      if (!normalizeAdvertisementGender(value)) {
+        throw new Error('Gender must be woman, man, couple or trans');
+      }
+      return true;
+    }),
   body('age').optional().isInt({ min: 21, max: 99 }).withMessage('Escort age must be 21 or older'),
   // Country must be NL
   body('country')

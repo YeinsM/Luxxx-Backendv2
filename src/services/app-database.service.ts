@@ -5,6 +5,7 @@ import {
   AdvertisementService,
   AdvertisementRate,
   UserMedia,
+  PromotionVideo,
   Review,
   Message,
   Conversation,
@@ -20,6 +21,18 @@ import {
   UpsertAdvertisementPromotionDto,
 } from '../models/advertisement.model';
 import { InternalServerError, NotFoundError } from '../models/error.model';
+import { normalizeAdvertisementGender } from '../utils/gender.utils';
+
+type PromotionVideoOwner = {
+  advertisementId: string;
+  userId: string;
+  name: string;
+  title?: string;
+  city?: string;
+  age?: number;
+  gender?: string;
+  profileImageUrl?: string;
+};
 
 export class AppDatabaseService {
   private client: SupabaseClient;
@@ -245,8 +258,9 @@ export class AppDatabaseService {
   // ============================================================
 
   async searchProfiles(params: ProfileSearchParams): Promise<{ profiles: Advertisement[]; total: number }> {
-    const { category, city, query, sortBy, page = 1, limit = 20 } = params;
+    const { category, city, query, gender, sortBy, page = 1, limit = 20 } = params;
     const offset = (page - 1) * limit;
+    const normalizedGender = normalizeAdvertisementGender(gender);
 
     let q = this.client
       .from('advertisements')
@@ -261,6 +275,9 @@ export class AppDatabaseService {
     }
     if (query) {
       q = q.or(`name.ilike.%${query}%,description.ilike.%${query}%,title.ilike.%${query}%`);
+    }
+    if (normalizedGender) {
+      q = q.eq('gender', normalizedGender);
     }
 
     // Sorting: plan tier (EXCLUSIVE→PREMIUM→STANDARD) is always the primary sort.
@@ -423,6 +440,293 @@ export class AppDatabaseService {
       .eq('public_id', publicId)
       .eq('user_id', userId);
     return !error;
+  }
+
+  // ============================================================
+  // PROMOTION VIDEOS
+  // ============================================================
+
+  async getUserPromotionVideos(userId: string): Promise<PromotionVideo[]> {
+    const { data, error } = await this.client
+      .from('promotion_videos')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false });
+
+    if (error) return [];
+    return (data || []).map(this.deserializePromotionVideo);
+  }
+
+  async getPromotionVideoById(id: string, userId?: string): Promise<PromotionVideo | null> {
+    let query = this.client
+      .from('promotion_videos')
+      .select('*')
+      .eq('id', id);
+
+    if (userId) {
+      query = query.eq('user_id', userId);
+    }
+
+    const { data, error } = await query.single();
+    if (error || !data) return null;
+    return this.deserializePromotionVideo(data);
+  }
+
+  async createPromotionVideo(video: Omit<PromotionVideo, 'id' | 'viewCount' | 'publishedAt' | 'createdAt' | 'updatedAt'>): Promise<PromotionVideo> {
+    const { data, error } = await this.client
+      .from('promotion_videos')
+      .insert([{
+        user_id: video.userId,
+        title: video.title,
+        description: video.description || null,
+        url: video.url,
+        public_id: video.publicId,
+        thumbnail_url: video.thumbnailUrl || null,
+        width: video.width || null,
+        height: video.height || null,
+        format: video.format || null,
+        duration: video.duration || null,
+        is_public: video.isPublic ?? false,
+        published_at: video.isPublic ? new Date().toISOString() : null,
+      }])
+      .select()
+      .single();
+
+    if (error) throw new InternalServerError(`Failed to create promotion video: ${error.message}`);
+    return this.deserializePromotionVideo(data);
+  }
+
+  async updatePromotionVideo(
+    id: string,
+    userId: string,
+    updates: Partial<Pick<PromotionVideo, 'title' | 'description' | 'isPublic'>>
+  ): Promise<PromotionVideo | null> {
+    const existing = await this.getPromotionVideoById(id, userId);
+    if (!existing) return null;
+
+    const nextIsPublic = updates.isPublic ?? existing.isPublic;
+    const row: Record<string, unknown> = {};
+
+    if (updates.title !== undefined) row.title = updates.title;
+    if (updates.description !== undefined) row.description = updates.description || null;
+    if (updates.isPublic !== undefined) {
+      row.is_public = nextIsPublic;
+      row.published_at = nextIsPublic
+        ? existing.publishedAt?.toISOString() || new Date().toISOString()
+        : null;
+    }
+
+    const { data, error } = await this.client
+      .from('promotion_videos')
+      .update(row)
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select('*')
+      .single();
+
+    if (error || !data) return null;
+    return this.deserializePromotionVideo(data);
+  }
+
+  async deletePromotionVideo(id: string, userId: string): Promise<boolean> {
+    const { error } = await this.client
+      .from('promotion_videos')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    return !error;
+  }
+
+  async recordPromotionVideoView(videoId: string, viewerUserId?: string): Promise<void> {
+    const video = await this.getPromotionVideoById(videoId);
+    if (!video || !video.isPublic) return;
+
+    await this.client.from('promotion_video_views').insert([{
+      promotion_video_id: videoId,
+      viewer_user_id: viewerUserId || null,
+      is_anonymous: !viewerUserId,
+    }]);
+
+    await this.client
+      .from('promotion_videos')
+      .update({ view_count: (video.viewCount || 0) + 1 })
+      .eq('id', videoId);
+  }
+
+  async getPromotionVideoStats(userId: string): Promise<{
+    totalVideos: number;
+    publicVideos: number;
+    totalViews: number;
+    last30DaysViews: number;
+    topVideoTitle?: string;
+    topVideoViews: number;
+    profileOpens: number;
+  }> {
+    const videos = await this.getUserPromotionVideos(userId);
+    const advertisement = await this.getAdvertisementByUserId(userId);
+    const videoIds = videos.map((video) => video.id);
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+
+    let last30DaysViews = 0;
+    if (videoIds.length > 0) {
+      const { count } = await this.client
+        .from('promotion_video_views')
+        .select('*', { count: 'exact', head: true })
+        .in('promotion_video_id', videoIds)
+        .gte('created_at', since);
+      last30DaysViews = count || 0;
+    }
+
+    const topVideo = videos
+      .slice()
+      .sort((a, b) => b.viewCount - a.viewCount)[0];
+
+    return {
+      totalVideos: videos.length,
+      publicVideos: videos.filter((video) => video.isPublic).length,
+      totalViews: videos.reduce((sum, video) => sum + video.viewCount, 0),
+      last30DaysViews,
+      topVideoTitle: topVideo?.title,
+      topVideoViews: topVideo?.viewCount || 0,
+      profileOpens: advertisement?.viewCount || 0,
+    };
+  }
+
+  async getPromotionVideoHub(
+    gender?: string,
+    page: number = 1,
+    limit: number = 8
+  ): Promise<{
+    newestVideos: any[];
+    newestTotal: number;
+    page: number;
+    limit: number;
+    popularModels: any[];
+    counts: Record<string, number>;
+  }> {
+    const normalizedGender = normalizeAdvertisementGender(gender);
+    const allOwners = await this.getPromotionVideoOwners();
+    const filteredOwners = normalizedGender
+      ? new Map(
+          [...allOwners.entries()].filter(([, owner]) => owner.gender === normalizedGender)
+        )
+      : allOwners;
+
+    const counts = { all: 0, woman: 0, man: 0, couple: 0, trans: 0 } as Record<string, number>;
+    const allUserIds = [...allOwners.keys()];
+
+    if (allUserIds.length > 0) {
+      const { data: countRows } = await this.client
+        .from('promotion_videos')
+        .select('id, user_id')
+        .eq('is_public', true)
+        .in('user_id', allUserIds);
+
+      for (const row of countRows || []) {
+        counts.all += 1;
+        const rowGender = allOwners.get(row.user_id)?.gender;
+        if (rowGender && counts[rowGender] !== undefined) {
+          counts[rowGender] += 1;
+        }
+      }
+    }
+
+    const filteredUserIds = [...filteredOwners.keys()];
+    if (filteredUserIds.length === 0) {
+      return {
+        newestVideos: [],
+        newestTotal: 0,
+        page,
+        limit,
+        popularModels: [],
+        counts,
+      };
+    }
+
+    const offset = (page - 1) * limit;
+    const { data: newestRows, count } = await this.client
+      .from('promotion_videos')
+      .select('*', { count: 'exact' })
+      .eq('is_public', true)
+      .in('user_id', filteredUserIds)
+      .order('published_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limit - 1);
+
+    const newestVideos = (newestRows || []).map((row: any) =>
+      this.serializePromotionVideoForPublic(row, filteredOwners.get(row.user_id))
+    );
+
+    const { data: publicRows } = await this.client
+      .from('promotion_videos')
+      .select('*')
+      .eq('is_public', true)
+      .in('user_id', filteredUserIds);
+
+    const allPublicRows = publicRows || [];
+    const videoIds = allPublicRows.map((row: any) => row.id);
+    const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    const last30ViewsByVideoId = new Map<string, number>();
+
+    if (videoIds.length > 0) {
+      const { data: last30Rows } = await this.client
+        .from('promotion_video_views')
+        .select('promotion_video_id')
+        .in('promotion_video_id', videoIds)
+        .gte('created_at', since);
+
+      for (const row of last30Rows || []) {
+        last30ViewsByVideoId.set(
+          row.promotion_video_id,
+          (last30ViewsByVideoId.get(row.promotion_video_id) || 0) + 1
+        );
+      }
+    }
+
+    const groupedOwners = new Map<string, any>();
+    for (const row of allPublicRows) {
+      const owner = filteredOwners.get(row.user_id);
+      if (!owner) continue;
+
+      const current = groupedOwners.get(row.user_id) || {
+        ...owner,
+        totalViews: 0,
+        last30DaysViews: 0,
+        videoCount: 0,
+        featuredVideos: [],
+      };
+
+      const serializedVideo = this.serializePromotionVideoForPublic(row, owner);
+      current.totalViews += row.view_count || 0;
+      current.last30DaysViews += last30ViewsByVideoId.get(row.id) || 0;
+      current.videoCount += 1;
+      current.featuredVideos.push(serializedVideo);
+      groupedOwners.set(row.user_id, current);
+    }
+
+    const popularModels = [...groupedOwners.values()]
+      .map((owner) => ({
+        ...owner,
+        featuredVideos: owner.featuredVideos
+          .sort((a: any, b: any) => b.views - a.views)
+          .slice(0, 2),
+      }))
+      .sort((a, b) =>
+        b.last30DaysViews - a.last30DaysViews ||
+        b.totalViews - a.totalViews ||
+        b.videoCount - a.videoCount
+      )
+      .slice(0, 5);
+
+    return {
+      newestVideos,
+      newestTotal: count || 0,
+      page,
+      limit,
+      popularModels,
+      counts,
+    };
   }
 
   // ============================================================
@@ -1028,46 +1332,40 @@ export class AppDatabaseService {
   // ============================================================
 
   async getTrendingVideos(sortBy?: string, page: number = 1, limit: number = 20): Promise<{ videos: any[]; total: number }> {
-    const offset = (page - 1) * limit;
-
-    let q = this.client
-      .from('user_media')
-      .select('*, users!inner(id, name)', { count: 'exact' })
-      .eq('resource_type', 'video');
-
-    switch (sortBy) {
-      case 'newest':
-        q = q.order('uploaded_at', { ascending: false });
-        break;
-      default:
-        q = q.order('uploaded_at', { ascending: false });
+    const allOwners = await this.getPromotionVideoOwners();
+    const userIds = [...allOwners.keys()];
+    if (userIds.length === 0) {
+      return { videos: [], total: 0 };
     }
 
-    q = q.range(offset, offset + limit - 1);
+    const offset = (page - 1) * limit;
+    let query = this.client
+      .from('promotion_videos')
+      .select('*', { count: 'exact' })
+      .eq('is_public', true)
+      .in('user_id', userIds);
 
-    const { data, error, count } = await q;
+    switch (sortBy) {
+      case 'views':
+        query = query.order('view_count', { ascending: false });
+        break;
+      case 'newest':
+      default:
+        query = query
+          .order('published_at', { ascending: false, nullsFirst: false })
+          .order('created_at', { ascending: false });
+        break;
+    }
 
+    const { data, error, count } = await query.range(offset, offset + limit - 1);
     if (error) {
-      // Fallback: query without join
-      const { data: vData, error: vError, count: vCount } = await this.client
-        .from('user_media')
-        .select('*', { count: 'exact' })
-        .eq('resource_type', 'video')
-        .order('uploaded_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (vError) return { videos: [], total: 0 };
-      return {
-        videos: (vData || []).map(this.deserializeMedia),
-        total: vCount || 0,
-      };
+      return { videos: [], total: 0 };
     }
 
     return {
-      videos: (data || []).map((row: any) => ({
-        ...this.deserializeMedia(row),
-        userName: row.users?.name,
-      })),
+      videos: (data || []).map((row: any) =>
+        this.serializePromotionVideoForPublic(row, allOwners.get(row.user_id))
+      ),
       total: count || 0,
     };
   }
@@ -1075,6 +1373,102 @@ export class AppDatabaseService {
   // ============================================================
   // SERIALIZATION HELPERS
   // ============================================================
+
+  private async getPromotionVideoOwners(): Promise<Map<string, PromotionVideoOwner>> {
+    const { data: advertisements } = await this.client
+      .from('advertisements')
+      .select('id, user_id, name, title, city, age, gender, selected_photo_ids')
+      .eq('is_online', true)
+      .eq('status', 'active');
+
+    const ownerRows = advertisements || [];
+    const userIds = ownerRows.map((row: any) => row.user_id);
+    const profileImages = await this.getPromotionVideoOwnerPhotos(ownerRows);
+    const owners = new Map<string, PromotionVideoOwner>();
+
+    for (const row of ownerRows) {
+      if (!userIds.includes(row.user_id)) continue;
+      owners.set(row.user_id, {
+        advertisementId: row.id,
+        userId: row.user_id,
+        name: row.name || 'Model',
+        title: row.title || undefined,
+        city: row.city || undefined,
+        age: row.age || undefined,
+        gender: normalizeAdvertisementGender(row.gender) || row.gender || undefined,
+        profileImageUrl: profileImages.get(row.user_id),
+      });
+    }
+
+    return owners;
+  }
+
+  private async getPromotionVideoOwnerPhotos(ownerRows: any[]): Promise<Map<string, string | undefined>> {
+    const userIds = ownerRows.map((row) => row.user_id);
+    const profileImages = new Map<string, string | undefined>();
+
+    if (userIds.length === 0) {
+      return profileImages;
+    }
+
+    const { data: photoRows } = await this.client
+      .from('user_media')
+      .select('user_id, url')
+      .eq('resource_type', 'image')
+      .in('user_id', userIds);
+
+    const photosByUser = new Map<string, string[]>();
+    for (const row of photoRows || []) {
+      photosByUser.set(row.user_id, [...(photosByUser.get(row.user_id) || []), row.url]);
+    }
+
+    for (const owner of ownerRows) {
+      const selectedPhotos = Array.isArray(owner.selected_photo_ids) ? owner.selected_photo_ids : [];
+      const availablePhotos = photosByUser.get(owner.user_id) || [];
+      profileImages.set(owner.user_id, selectedPhotos[0] || availablePhotos[0]);
+    }
+
+    return profileImages;
+  }
+
+  private serializePromotionVideoForPublic(row: any, owner?: PromotionVideoOwner | null): any {
+    const durationSeconds = row.duration ? parseFloat(row.duration) : 0;
+
+    return {
+      id: row.id,
+      title: row.title,
+      description: row.description || undefined,
+      thumbnailUrl: row.thumbnail_url || row.url,
+      videoUrl: row.url,
+      url: row.url,
+      duration: this.formatPromotionVideoDuration(durationSeconds),
+      durationSeconds,
+      views: row.view_count || 0,
+      userId: row.user_id,
+      advertisementId: owner?.advertisementId,
+      creatorName: owner?.name || 'Model',
+      creatorTitle: owner?.title,
+      city: owner?.city,
+      age: owner?.age,
+      gender: owner?.gender,
+      profileImageUrl: owner?.profileImageUrl,
+      isPublic: row.is_public ?? false,
+      createdAt: row.created_at,
+      publishedAt: row.published_at,
+    };
+  }
+
+  private formatPromotionVideoDuration(durationSeconds: number): string {
+    if (!durationSeconds || Number.isNaN(durationSeconds)) {
+      return '00:00';
+    }
+
+    const totalSeconds = Math.max(0, Math.round(durationSeconds));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
 
   private serializeAd(ad: Partial<Advertisement> & { userId?: string }): any {
     const row: any = {};
@@ -1091,7 +1485,7 @@ export class AppDatabaseService {
     if (ad.city !== undefined) row.city = ad.city;
     if (ad.cityPart !== undefined) row.city_part = ad.cityPart;
     if (ad.zipCode !== undefined) row.zip_code = ad.zipCode;
-    if (ad.gender !== undefined) row.gender = ad.gender;
+    if (ad.gender !== undefined) row.gender = normalizeAdvertisementGender(ad.gender) ?? ad.gender;
     if (ad.genderIdentity !== undefined) row.gender_identity = ad.genderIdentity;
     if (ad.orientation !== undefined) row.orientation = ad.orientation;
     if (ad.age !== undefined) row.age = ad.age;
@@ -1154,6 +1548,8 @@ export class AppDatabaseService {
   }
 
   private deserializeAd(data: any): Advertisement {
+    const normalizedGender = normalizeAdvertisementGender(data.gender);
+
     return {
       id: data.id,
       userId: data.user_id,
@@ -1169,7 +1565,7 @@ export class AppDatabaseService {
       city: data.city,
       cityPart: data.city_part,
       zipCode: data.zip_code,
-      gender: data.gender,
+      gender: normalizedGender ?? data.gender,
       genderIdentity: data.gender_identity,
       orientation: data.orientation,
       age: data.age,
@@ -1245,6 +1641,27 @@ export class AppDatabaseService {
       duration: data.duration ? parseFloat(data.duration) : undefined,
       thumbnailUrl: data.thumbnail_url,
       uploadedAt: new Date(data.uploaded_at),
+    };
+  }
+
+  private deserializePromotionVideo(data: any): PromotionVideo {
+    return {
+      id: data.id,
+      userId: data.user_id,
+      title: data.title,
+      description: data.description || undefined,
+      url: data.url,
+      publicId: data.public_id,
+      thumbnailUrl: data.thumbnail_url || undefined,
+      width: data.width || undefined,
+      height: data.height || undefined,
+      format: data.format || undefined,
+      duration: data.duration ? parseFloat(data.duration) : undefined,
+      isPublic: data.is_public ?? false,
+      viewCount: data.view_count || 0,
+      publishedAt: data.published_at ? new Date(data.published_at) : undefined,
+      createdAt: new Date(data.created_at),
+      updatedAt: new Date(data.updated_at),
     };
   }
 

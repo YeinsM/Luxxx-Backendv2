@@ -153,6 +153,33 @@ export interface UserMedia {
   uploadedAt: Date;
 }
 
+export interface PromotionVideo {
+  id: string;
+  userId: string;
+  title: string;
+  description?: string;
+  url: string;
+  publicId: string;
+  thumbnailUrl?: string;
+  width?: number;
+  height?: number;
+  format?: string;
+  duration?: number;
+  isPublic: boolean;
+  viewCount: number;
+  publishedAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface PromotionVideoView {
+  id: string;
+  promotionVideoId: string;
+  viewerUserId?: string;
+  isAnonymous: boolean;
+  createdAt: Date;
+}
+
 export interface Review {
   id: string;
   advertisementId: string;
@@ -397,6 +424,7 @@ export interface ProfileSearchParams {
   category?: string;
   city?: string;
   query?: string;
+  gender?: string;
   sortBy?: 'rating' | 'price' | 'newest' | 'distance';
   minPrice?: number;
   maxPrice?: number;
