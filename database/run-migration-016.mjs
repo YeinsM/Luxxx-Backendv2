@@ -8,7 +8,7 @@ const client = new Client({ connectionString: process.env.DATABASE_URL_SUPABASE,
 await client.connect();
 
 const rows = [
-  { key: 'app_name',         value: 'Luxxx' },
+  { key: 'app_name',         value: 'Scandal' },
   { key: 'app_logo_url',     value: '' },
   { key: 'app_logo_dark_url', value: '' },
   { key: 'app_favicon_url',  value: '' },

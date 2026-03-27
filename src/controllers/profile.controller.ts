@@ -68,8 +68,10 @@ export class ProfileController {
       const ad = await db.getAdvertisementById(req.params.id);
       if (!ad) throw new NotFoundError('Profile not found');
 
-      // Increment view count (fire & forget)
-      db.incrementViewCount(ad.id).catch(() => {});
+      const shouldCountView = req.query.viewSource === 'search';
+      if (shouldCountView) {
+        db.incrementViewCount(ad.id).catch(() => {});
+      }
 
       const response: ApiResponse = {
         success: true,
