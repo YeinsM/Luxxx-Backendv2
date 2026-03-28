@@ -1814,7 +1814,7 @@ export class AppDatabaseService {
       .order('price_per_day', { ascending: true });
 
     if (error) throw new InternalServerError(`Failed to fetch promotion plans: ${error.message}`);
-    return (data || []).map(this.deserializePromotionPlan);
+    return (data || []).map((row) => this.deserializePromotionPlan(row));
   }
 
   async updatePromotionPlan(
@@ -1825,7 +1825,7 @@ export class AppDatabaseService {
     if (updates.pricePerDay !== undefined) row.price_per_day = updates.pricePerDay;
     if (updates.pricePerWeek !== undefined) row.price_per_week = updates.pricePerWeek;
     if (updates.pricePerMonth !== undefined) row.price_per_month = updates.pricePerMonth;
-    if (updates.features !== undefined) row.features = updates.features;
+    if (updates.features !== undefined) row.features = this.normalizePromotionPlanFeatures(updates.features);
     if (updates.isActive !== undefined) row.is_active = updates.isActive;
 
     const { data, error } = await this.client
@@ -1883,10 +1883,95 @@ export class AppDatabaseService {
       pricePerDay: parseFloat(data.price_per_day),
       pricePerWeek: parseFloat(data.price_per_week),
       pricePerMonth: parseFloat(data.price_per_month),
-      features: data.features ?? {},
+      features: this.normalizePromotionPlanFeatures(data.features),
       isActive: data.is_active,
       updatedAt: new Date(data.updated_at),
     };
+  }
+
+  private normalizePromotionPlanFeatures(features: unknown): Record<string, unknown> {
+    if (!features || typeof features !== 'object' || Array.isArray(features)) {
+      return {};
+    }
+
+    const normalized: Record<string, unknown> = {};
+
+    for (const [rawKey, rawValue] of Object.entries(features as Record<string, unknown>)) {
+      const normalizedKey = this.normalizePromotionPlanFeatureKey(rawKey);
+      normalized[normalizedKey] = rawValue;
+    }
+
+    if (typeof normalized.position === 'string') {
+      normalized.position = this.normalizePromotionPlanPosition(normalized.position);
+    }
+
+    return normalized;
+  }
+
+  private normalizePromotionPlanFeatureKey(key: string): string {
+    const normalized = key
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const canonicalKeys = new Set([
+      'direct_contact',
+      'unlimited_videos',
+      'max_photos',
+      'website_link',
+      'rotating_banner',
+      'promo_tag',
+      'emoji_in_title',
+      'promo_sticker_price_per_day',
+      'boost_price_per_day',
+      'emoji_price_per_day',
+      'position',
+    ]);
+
+    return canonicalKeys.has(normalized) ? normalized : key;
+  }
+
+  private normalizePromotionPlanPosition(position: string): string {
+    const raw = position.trim();
+    if (!raw) return raw;
+
+    const normalized = raw
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const standardTokens = ['standard', 'standaard', 'estandar', 'padrao'];
+    const aboveTokens = ['above', 'encima', 'boven', 'acima', 'nad'];
+
+    if (normalized === 'above_standard' || normalized === 'above_premium') {
+      return normalized;
+    }
+
+    if (standardTokens.includes(normalized)) {
+      return 'standard';
+    }
+
+    if (normalized === 'premium') {
+      return 'above_premium';
+    }
+
+    const hasAboveToken = aboveTokens.some((token) => normalized.includes(token));
+    const hasStandardToken = standardTokens.some((token) => normalized.includes(token));
+
+    if (normalized.includes('premium')) {
+      return 'above_premium';
+    }
+
+    if (hasStandardToken) {
+      return hasAboveToken ? 'above_standard' : 'standard';
+    }
+
+    return raw;
   }
 
   private deserializeAdvertisementPromotion(data: any): AdvertisementPromotion {
