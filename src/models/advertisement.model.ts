@@ -91,9 +91,10 @@ export interface Advertisement {
   promotionType?: string;
   targetAudience?: string;
   campaignDuration?: string;
-  selectedPlan?: string;       // STANDARD | PREMIUM | EXCLUSIVE
+  selectedPlan?: string;       // STANDARD | LAUNCH | PREMIUM | EXCLUSIVE
   selectedDuration?: string;   // DAY | WEEK | MONTH
   selectedAddons?: string[];   // e.g. ['promo_sticker', 'emoji_title']
+  planExpiresAt?: Date;
   
   // Stats
   viewCount: number;
@@ -335,9 +336,10 @@ export interface CreateAdvertisementDto {
   promotionType?: string;
   targetAudience?: string;
   campaignDuration?: string;
-  selectedPlan?: string;      // STANDARD | PREMIUM | EXCLUSIVE
+  selectedPlan?: string;      // STANDARD | LAUNCH | PREMIUM | EXCLUSIVE
   selectedDuration?: string;  // DAY | WEEK | MONTH
   selectedAddons?: string[];  // e.g. ['promo_sticker', 'emoji_title']
+  planExpiresAt?: Date;
   // Emoji title feature
   titleEmoji?: string;
   // Selected photos
@@ -372,7 +374,8 @@ export interface CreateSavedSearchDto {
 // Promotion Plans (dynamic, admin-managed)
 // ============================================================
 
-export type PlanName = 'STANDARD' | 'PREMIUM' | 'EXCLUSIVE';
+export type PlanName = 'STANDARD' | 'LAUNCH' | 'PREMIUM' | 'EXCLUSIVE';
+export type PromotionPlanAvailabilityStatus = 'AVAILABLE' | 'COMING_SOON' | 'HIDDEN';
 export type DurationType = 'DAY' | 'WEEK' | 'MONTH';
 
 export interface PromotionPlanFeatures {
@@ -384,6 +387,8 @@ export interface PromotionPlanFeatures {
   promo_tag?: boolean;
   emoji_in_title?: boolean;
   promo_sticker_price_per_day?: number;
+  boost_price_per_day?: number;
+  emoji_price_per_day?: number;
   position?: string;
   [key: string]: unknown;
 }
@@ -391,11 +396,14 @@ export interface PromotionPlanFeatures {
 export interface PromotionPlan {
   id: string;
   name: PlanName;
+  displayName: string;
   pricePerDay: number;
   pricePerWeek: number;
   pricePerMonth: number;
   features: PromotionPlanFeatures;
   isActive: boolean;
+  availabilityStatus: PromotionPlanAvailabilityStatus;
+  expiresAt?: Date | null;
   updatedAt: Date;
 }
 

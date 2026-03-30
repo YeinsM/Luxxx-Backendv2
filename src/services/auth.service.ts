@@ -23,17 +23,19 @@ import { getEmailService } from './email.service';
 import { getAppDatabaseService } from './app-database.service';
 import { hashPassword, comparePassword } from '../utils/password.utils';
 import { generateToken } from '../utils/jwt.utils';
-import { BadRequestError, UnauthorizedError } from '../models/error.model';
+import { BadRequestError, ForbiddenError, UnauthorizedError } from '../models/error.model';
 
 export class AuthService {
   private db = getDatabaseService();
   private emailService = getEmailService();
+  private appDb = getAppDatabaseService();
 
   // ── In-memory OTP store ───────────────────────────────────────────────
   // key = email (lowercase), value = { otp, expiresAt }
   private static loginOtpStore = new Map<string, { otp: string; expiresAt: Date }>();
 
   async registerEscort(dto: RegisterEscortDto): Promise<RegistrationResponse> {
+    await this.ensureRegistrationEnabled(UserType.ESCORT);
     this.validatePassword(dto.password);
 
     // Compute age from date of birth
@@ -84,6 +86,7 @@ export class AuthService {
   }
 
   async registerMember(dto: RegisterMemberDto): Promise<RegistrationResponse> {
+    await this.ensureRegistrationEnabled(UserType.MEMBER);
     this.validatePassword(dto.password);
 
     const hashedPassword = await hashPassword(dto.password);
@@ -125,6 +128,7 @@ export class AuthService {
   }
 
   async registerAgency(dto: RegisterAgencyDto): Promise<RegistrationResponse> {
+    await this.ensureRegistrationEnabled(UserType.AGENCY);
     this.validatePassword(dto.password);
 
     const hashedPassword = await hashPassword(dto.password);
@@ -168,6 +172,7 @@ export class AuthService {
   }
 
   async registerClub(dto: RegisterClubDto): Promise<RegistrationResponse> {
+    await this.ensureRegistrationEnabled(UserType.CLUB);
     this.validatePassword(dto.password);
 
     const hashedPassword = await hashPassword(dto.password);
@@ -599,6 +604,47 @@ export class AuthService {
     if (password.length < 6) {
       throw new BadRequestError('Password must be at least 6 characters long');
     }
+  }
+
+  private async ensureRegistrationEnabled(userType: UserType): Promise<void> {
+    const rawValue = await this.appDb.getAdminSetting(
+      this.getRegistrationSettingKey(userType),
+    );
+
+    if (!this.parseBooleanSetting(rawValue, true)) {
+      throw new ForbiddenError('El registro para este tipo de cuenta está deshabilitado por administración');
+    }
+  }
+
+  private getRegistrationSettingKey(userType: UserType): string {
+    switch (userType) {
+      case UserType.ESCORT:
+        return 'registration_escort_enabled';
+      case UserType.MEMBER:
+        return 'registration_member_enabled';
+      case UserType.AGENCY:
+        return 'registration_agency_enabled';
+      case UserType.CLUB:
+        return 'registration_club_enabled';
+      default:
+        return 'registration_member_enabled';
+    }
+  }
+
+  private parseBooleanSetting(value: string | null, defaultValue: boolean): boolean {
+    if (value === null || value.trim() === '') {
+      return defaultValue;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+
+    return defaultValue;
   }
 
   private generateAuthResponse(user: User): AuthResponse {

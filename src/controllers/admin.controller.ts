@@ -7,9 +7,67 @@ import { getEmailService } from "../services/email.service";
 import { generateSetupToken } from "../utils/jwt.utils";
 import { getCloudinaryService } from "../services/cloudinary.service";
 import { config } from "../config";
+import type { PromotionPlanAvailabilityStatus } from "../models/advertisement.model";
 
 const db = getDatabaseService();
 const appDb = getAppDatabaseService();
+
+const REGISTRATION_SETTING_KEYS = {
+  escortRegistrationEnabled: "registration_escort_enabled",
+  memberRegistrationEnabled: "registration_member_enabled",
+  agencyRegistrationEnabled: "registration_agency_enabled",
+  clubRegistrationEnabled: "registration_club_enabled",
+} as const;
+
+const PUBLIC_MENU_SETTING_KEYS = {
+  homeMenuEnabled: "menu_home_enabled",
+  womenMenuEnabled: "menu_women_enabled",
+  menMenuEnabled: "menu_men_enabled",
+  couplesMenuEnabled: "menu_couples_enabled",
+  transMenuEnabled: "menu_trans_enabled",
+  companionsMenuEnabled: "menu_companions_enabled",
+  videosMenuEnabled: "menu_videos_enabled",
+} as const;
+
+function parseBooleanAdminSetting(
+  value: string | undefined,
+  defaultValue: boolean,
+): boolean {
+  if (value === undefined || value === null || value.trim() === "") {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (["false", "0", "no", "off"].includes(normalized)) {
+    return false;
+  }
+  if (["true", "1", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  return defaultValue;
+}
+
+function parseBooleanAdminInput(
+  value: unknown,
+  fieldName: string,
+): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off"].includes(normalized)) {
+      return false;
+    }
+  }
+
+  throw new BadRequestError(`${fieldName} must be a boolean`);
+}
 
 /**
  * GET /api/admin/users
@@ -121,7 +179,7 @@ export async function getAdminPromotionPlans(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const plans = await appDb.getPromotionPlans();
+    const plans = await appDb.getPromotionPlans({ includeHidden: true });
     res.json({ data: plans });
   } catch (err) {
     next(err);
@@ -139,8 +197,29 @@ export async function updateAdminPromotionPlan(
 ): Promise<void> {
   try {
     const { id } = req.params;
-    const { pricePerDay, pricePerWeek, pricePerMonth, features, isActive } =
+    const {
+      pricePerDay,
+      pricePerWeek,
+      pricePerMonth,
+      displayName,
+      features,
+      isActive,
+      availabilityStatus,
+      expiresAt,
+    } =
       req.body;
+
+    let parsedExpiresAt: Date | null | undefined = undefined;
+    if (expiresAt !== undefined) {
+      if (expiresAt === null || expiresAt === "") {
+        parsedExpiresAt = null;
+      } else {
+        parsedExpiresAt = new Date(String(expiresAt));
+        if (Number.isNaN(parsedExpiresAt.getTime())) {
+          throw new BadRequestError("expiresAt must be a valid date");
+        }
+      }
+    }
 
     const plan = await appDb.updatePromotionPlan(id, {
       pricePerDay: pricePerDay !== undefined ? Number(pricePerDay) : undefined,
@@ -148,8 +227,14 @@ export async function updateAdminPromotionPlan(
         pricePerWeek !== undefined ? Number(pricePerWeek) : undefined,
       pricePerMonth:
         pricePerMonth !== undefined ? Number(pricePerMonth) : undefined,
+      displayName: displayName !== undefined ? String(displayName) : undefined,
       features: features ?? undefined,
       isActive: isActive !== undefined ? Boolean(isActive) : undefined,
+      expiresAt: parsedExpiresAt,
+      availabilityStatus:
+        availabilityStatus !== undefined
+          ? (String(availabilityStatus) as PromotionPlanAvailabilityStatus)
+          : undefined,
     });
 
     res.json({ data: plan });
@@ -473,6 +558,50 @@ export async function getAdminSettings(
         themeColorFrom: settings["theme_color_from"] ?? "",
         themeColorTo: settings["theme_color_to"] ?? "",
         topbarBgImage: settings["topbar_bg_image"] ?? "",
+        escortRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.escortRegistrationEnabled],
+          true,
+        ),
+        memberRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.memberRegistrationEnabled],
+          true,
+        ),
+        agencyRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.agencyRegistrationEnabled],
+          true,
+        ),
+        clubRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.clubRegistrationEnabled],
+          true,
+        ),
+        homeMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.homeMenuEnabled],
+          true,
+        ),
+        womenMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.womenMenuEnabled],
+          true,
+        ),
+        menMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.menMenuEnabled],
+          true,
+        ),
+        couplesMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.couplesMenuEnabled],
+          true,
+        ),
+        transMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.transMenuEnabled],
+          true,
+        ),
+        companionsMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.companionsMenuEnabled],
+          true,
+        ),
+        videosMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled],
+          true,
+        ),
       },
     });
   } catch (err) {
@@ -490,7 +619,27 @@ export async function updateAdminSettings(
   next: NextFunction,
 ): Promise<void> {
   try {
-    const { securityAlertEmail, appName, appLogoUrl, appLogoDarkUrl, appFaviconUrl, themeColorFrom, themeColorTo, topbarBgImage } = req.body;
+    const {
+      securityAlertEmail,
+      appName,
+      appLogoUrl,
+      appLogoDarkUrl,
+      appFaviconUrl,
+      themeColorFrom,
+      themeColorTo,
+      topbarBgImage,
+      escortRegistrationEnabled,
+      memberRegistrationEnabled,
+      agencyRegistrationEnabled,
+      clubRegistrationEnabled,
+      homeMenuEnabled,
+      womenMenuEnabled,
+      menMenuEnabled,
+      couplesMenuEnabled,
+      transMenuEnabled,
+      companionsMenuEnabled,
+      videosMenuEnabled,
+    } = req.body;
 
     const supabase = (getDatabaseService() as any).client;
     const now = new Date().toISOString();
@@ -539,6 +688,103 @@ export async function updateAdminSettings(
     }
     if (topbarBgImage !== undefined) {
       upserts.push({ key: "topbar_bg_image", value: topbarBgImage, updated_at: now });
+    }
+    if (escortRegistrationEnabled !== undefined) {
+      upserts.push({
+        key: REGISTRATION_SETTING_KEYS.escortRegistrationEnabled,
+        value: String(
+          parseBooleanAdminInput(
+            escortRegistrationEnabled,
+            "escortRegistrationEnabled",
+          ),
+        ),
+        updated_at: now,
+      });
+    }
+    if (memberRegistrationEnabled !== undefined) {
+      upserts.push({
+        key: REGISTRATION_SETTING_KEYS.memberRegistrationEnabled,
+        value: String(
+          parseBooleanAdminInput(
+            memberRegistrationEnabled,
+            "memberRegistrationEnabled",
+          ),
+        ),
+        updated_at: now,
+      });
+    }
+    if (agencyRegistrationEnabled !== undefined) {
+      upserts.push({
+        key: REGISTRATION_SETTING_KEYS.agencyRegistrationEnabled,
+        value: String(
+          parseBooleanAdminInput(
+            agencyRegistrationEnabled,
+            "agencyRegistrationEnabled",
+          ),
+        ),
+        updated_at: now,
+      });
+    }
+    if (clubRegistrationEnabled !== undefined) {
+      upserts.push({
+        key: REGISTRATION_SETTING_KEYS.clubRegistrationEnabled,
+        value: String(
+          parseBooleanAdminInput(
+            clubRegistrationEnabled,
+            "clubRegistrationEnabled",
+          ),
+        ),
+        updated_at: now,
+      });
+    }
+    if (homeMenuEnabled !== undefined) {
+      upserts.push({
+        key: PUBLIC_MENU_SETTING_KEYS.homeMenuEnabled,
+        value: String(parseBooleanAdminInput(homeMenuEnabled, "homeMenuEnabled")),
+        updated_at: now,
+      });
+    }
+    if (womenMenuEnabled !== undefined) {
+      upserts.push({
+        key: PUBLIC_MENU_SETTING_KEYS.womenMenuEnabled,
+        value: String(parseBooleanAdminInput(womenMenuEnabled, "womenMenuEnabled")),
+        updated_at: now,
+      });
+    }
+    if (menMenuEnabled !== undefined) {
+      upserts.push({
+        key: PUBLIC_MENU_SETTING_KEYS.menMenuEnabled,
+        value: String(parseBooleanAdminInput(menMenuEnabled, "menMenuEnabled")),
+        updated_at: now,
+      });
+    }
+    if (couplesMenuEnabled !== undefined) {
+      upserts.push({
+        key: PUBLIC_MENU_SETTING_KEYS.couplesMenuEnabled,
+        value: String(parseBooleanAdminInput(couplesMenuEnabled, "couplesMenuEnabled")),
+        updated_at: now,
+      });
+    }
+    if (transMenuEnabled !== undefined) {
+      upserts.push({
+        key: PUBLIC_MENU_SETTING_KEYS.transMenuEnabled,
+        value: String(parseBooleanAdminInput(transMenuEnabled, "transMenuEnabled")),
+        updated_at: now,
+      });
+    }
+    if (companionsMenuEnabled !== undefined) {
+      upserts.push({
+        key: PUBLIC_MENU_SETTING_KEYS.companionsMenuEnabled,
+        value: String(parseBooleanAdminInput(companionsMenuEnabled, "companionsMenuEnabled")),
+        updated_at: now,
+      });
+    }
+    if (videosMenuEnabled !== undefined) {
+      upserts.push({
+        key: PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled,
+        value: String(parseBooleanAdminInput(videosMenuEnabled, "videosMenuEnabled")),
+        updated_at: now,
+      });
     }
 
     if (upserts.length > 0) {
@@ -628,7 +874,26 @@ export async function getBranding(
     const { data, error } = await supabase
       .from("admin_settings")
       .select("key, value")
-      .in("key", ["app_name", "app_logo_url", "app_logo_dark_url", "app_favicon_url", "theme_color_from", "theme_color_to", "topbar_bg_image"]);
+      .in("key", [
+        "app_name",
+        "app_logo_url",
+        "app_logo_dark_url",
+        "app_favicon_url",
+        "theme_color_from",
+        "theme_color_to",
+        "topbar_bg_image",
+        REGISTRATION_SETTING_KEYS.escortRegistrationEnabled,
+        REGISTRATION_SETTING_KEYS.memberRegistrationEnabled,
+        REGISTRATION_SETTING_KEYS.agencyRegistrationEnabled,
+        REGISTRATION_SETTING_KEYS.clubRegistrationEnabled,
+        PUBLIC_MENU_SETTING_KEYS.homeMenuEnabled,
+        PUBLIC_MENU_SETTING_KEYS.womenMenuEnabled,
+        PUBLIC_MENU_SETTING_KEYS.menMenuEnabled,
+        PUBLIC_MENU_SETTING_KEYS.couplesMenuEnabled,
+        PUBLIC_MENU_SETTING_KEYS.transMenuEnabled,
+        PUBLIC_MENU_SETTING_KEYS.companionsMenuEnabled,
+        PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled,
+      ]);
 
     if (error) throw error;
 
@@ -646,6 +911,50 @@ export async function getBranding(
         themeColorFrom: settings["theme_color_from"] ?? "",
         themeColorTo: settings["theme_color_to"] ?? "",
         topbarBgImage: settings["topbar_bg_image"] ?? "",
+        escortRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.escortRegistrationEnabled],
+          true,
+        ),
+        memberRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.memberRegistrationEnabled],
+          true,
+        ),
+        agencyRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.agencyRegistrationEnabled],
+          true,
+        ),
+        clubRegistrationEnabled: parseBooleanAdminSetting(
+          settings[REGISTRATION_SETTING_KEYS.clubRegistrationEnabled],
+          true,
+        ),
+        homeMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.homeMenuEnabled],
+          true,
+        ),
+        womenMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.womenMenuEnabled],
+          true,
+        ),
+        menMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.menMenuEnabled],
+          true,
+        ),
+        couplesMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.couplesMenuEnabled],
+          true,
+        ),
+        transMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.transMenuEnabled],
+          true,
+        ),
+        companionsMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.companionsMenuEnabled],
+          true,
+        ),
+        videosMenuEnabled: parseBooleanAdminSetting(
+          settings[PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled],
+          true,
+        ),
       },
     });
   } catch (err) {

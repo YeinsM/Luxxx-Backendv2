@@ -17,6 +17,7 @@ import {
   CreateAdvertisementDto,
   ProfileSearchParams,
   PromotionPlan,
+  PromotionPlanAvailabilityStatus,
   AdvertisementPromotion,
   UpsertAdvertisementPromotionDto,
 } from '../models/advertisement.model';
@@ -56,6 +57,9 @@ export class AppDatabaseService {
 
     // Set status to 'active' by default, visibility is controlled by isOnline
     const row = this.serializeAd({ ...adData, userId, status: 'active' } as any);
+    if ((adData as any).selectedPlan !== undefined) {
+      row.plan_priority = await this.resolvePlanPriorityForSelectedPlan((adData as any).selectedPlan);
+    }
     const { data, error } = await this.client
       .from('advertisements')
       .insert([row])
@@ -139,6 +143,9 @@ export class AppDatabaseService {
   async updateAdvertisement(id: string, userId: string, dto: Partial<CreateAdvertisementDto>): Promise<Advertisement> {
     const { services, rates, ...adData } = dto;
     const row = this.serializeAd(adData as any);
+    if ((adData as any).selectedPlan !== undefined) {
+      row.plan_priority = await this.resolvePlanPriorityForSelectedPlan((adData as any).selectedPlan);
+    }
 
     const { data, error } = await this.client
       .from('advertisements')
@@ -1544,11 +1551,6 @@ export class AppDatabaseService {
     if (ad.campaignDuration !== undefined) row.campaign_duration = ad.campaignDuration;
     if ((ad as any).selectedPlan !== undefined) {
       row.selected_plan = (ad as any).selectedPlan;
-      // Keep plan_priority in sync whenever selected_plan changes
-      row.plan_priority = (ad as any).selectedPlan === 'EXCLUSIVE' ? 3
-        : (ad as any).selectedPlan === 'PREMIUM' ? 2
-        : (ad as any).selectedPlan === 'STANDARD' ? 1
-        : 0;
     }
     if ((ad as any).selectedDuration !== undefined) row.selected_duration = (ad as any).selectedDuration;
     if ((ad as any).selectedAddons !== undefined) row.selected_addons = (ad as any).selectedAddons;
@@ -1627,6 +1629,7 @@ export class AppDatabaseService {
       selectedPlan: data.selected_plan,
       selectedDuration: data.selected_duration,
       selectedAddons: data.selected_addons ?? [],
+      planExpiresAt: data.plan_expires_at ? new Date(data.plan_expires_at) : undefined,
       selectedPhotoIds: data.selected_photo_ids || [],
       selectedVideoIds: data.selected_video_ids || [],
       planPriority: data.plan_priority ?? 0,
@@ -1806,27 +1809,66 @@ export class AppDatabaseService {
   // PROMOTION PLANS
   // ============================================================
 
-  async getPromotionPlans(): Promise<PromotionPlan[]> {
-    const { data, error } = await this.client
+  async getPromotionPlans(options: { includeHidden?: boolean } = {}): Promise<PromotionPlan[]> {
+    let query = this.client
       .from('promotion_plans')
-      .select('*')
-      .eq('is_active', true)
-      .order('price_per_day', { ascending: true });
+      .select('*');
+
+    if (!options.includeHidden) {
+      query = query.neq('availability_status', 'HIDDEN');
+    }
+
+    const { data, error } = await query;
 
     if (error) throw new InternalServerError(`Failed to fetch promotion plans: ${error.message}`);
-    return (data || []).map((row) => this.deserializePromotionPlan(row));
+
+    return (data || [])
+      .map((row) => this.deserializePromotionPlan(row))
+      .sort((left, right) => this.getPromotionPlanSortWeight(left.name) - this.getPromotionPlanSortWeight(right.name));
   }
 
   async updatePromotionPlan(
     id: string,
-    updates: Partial<Pick<PromotionPlan, 'pricePerDay' | 'pricePerWeek' | 'pricePerMonth' | 'features' | 'isActive'>>,
+    updates: Partial<
+      Pick<
+        PromotionPlan,
+        'pricePerDay' | 'pricePerWeek' | 'pricePerMonth' | 'displayName' | 'features' | 'isActive' | 'availabilityStatus' | 'expiresAt'
+      >
+    >,
   ): Promise<PromotionPlan> {
+    const { data: currentPlan, error: currentPlanError } = await this.client
+      .from('promotion_plans')
+      .select('name, expires_at')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (currentPlanError) {
+      throw new InternalServerError(`Failed to load current promotion plan: ${currentPlanError.message}`);
+    }
+
+    if (!currentPlan) {
+      throw new NotFoundError('Promotion plan not found');
+    }
+
     const row: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (updates.pricePerDay !== undefined) row.price_per_day = updates.pricePerDay;
     if (updates.pricePerWeek !== undefined) row.price_per_week = updates.pricePerWeek;
     if (updates.pricePerMonth !== undefined) row.price_per_month = updates.pricePerMonth;
+    if (updates.displayName !== undefined) row.display_name = updates.displayName.trim();
     if (updates.features !== undefined) row.features = this.normalizePromotionPlanFeatures(updates.features);
-    if (updates.isActive !== undefined) row.is_active = updates.isActive;
+    if (updates.expiresAt !== undefined) {
+      row.expires_at = updates.expiresAt ? updates.expiresAt.toISOString() : null;
+    }
+    if (updates.availabilityStatus !== undefined) {
+      const normalizedStatus = this.normalizePromotionPlanAvailabilityStatus(updates.availabilityStatus);
+      row.availability_status = normalizedStatus;
+      row.is_active = normalizedStatus !== 'HIDDEN';
+    } else if (updates.isActive !== undefined) {
+      row.is_active = updates.isActive;
+      if (!updates.isActive) {
+        row.availability_status = 'HIDDEN';
+      }
+    }
 
     const { data, error } = await this.client
       .from('promotion_plans')
@@ -1837,6 +1879,20 @@ export class AppDatabaseService {
 
     if (error) throw new InternalServerError(`Failed to update promotion plan: ${error.message}`);
     if (!data) throw new NotFoundError('Promotion plan not found');
+
+    if (updates.expiresAt instanceof Date && !Number.isNaN(updates.expiresAt.getTime())) {
+      const { error: adsError } = await this.client
+        .from('advertisements')
+        .update({
+          plan_expires_at: updates.expiresAt.toISOString(),
+        })
+        .eq('selected_plan', data.name);
+
+      if (adsError) {
+        throw new InternalServerError(`Failed to sync advertisement plan expiry: ${adsError.message}`);
+      }
+    }
+
     return this.deserializePromotionPlan(data);
   }
 
@@ -1880,11 +1936,14 @@ export class AppDatabaseService {
     return {
       id: data.id,
       name: data.name,
+      displayName: (data.display_name || '').trim() || this.getDefaultPromotionPlanDisplayName(data.name),
       pricePerDay: parseFloat(data.price_per_day),
       pricePerWeek: parseFloat(data.price_per_week),
       pricePerMonth: parseFloat(data.price_per_month),
       features: this.normalizePromotionPlanFeatures(data.features),
       isActive: data.is_active,
+      availabilityStatus: this.normalizePromotionPlanAvailabilityStatus(data.availability_status),
+      expiresAt: data.expires_at ? new Date(data.expires_at) : null,
       updatedAt: new Date(data.updated_at),
     };
   }
@@ -1932,6 +1991,85 @@ export class AppDatabaseService {
     ]);
 
     return canonicalKeys.has(normalized) ? normalized : key;
+  }
+
+  private getDefaultPromotionPlanDisplayName(name: string): string {
+    switch (name) {
+      case 'LAUNCH':
+        return 'Launch Plan';
+      case 'PREMIUM':
+        return 'Featured';
+      case 'EXCLUSIVE':
+        return 'Elite';
+      default:
+        return 'Standard';
+    }
+  }
+
+  private getPromotionPlanSortWeight(name: string): number {
+    switch (name) {
+      case 'STANDARD':
+        return 1;
+      case 'LAUNCH':
+        return 2;
+      case 'PREMIUM':
+        return 3;
+      case 'EXCLUSIVE':
+        return 4;
+      default:
+        return 99;
+    }
+  }
+
+  private normalizePromotionPlanAvailabilityStatus(
+    value: string | null | undefined,
+  ): PromotionPlanAvailabilityStatus {
+    if (!value) return 'AVAILABLE';
+
+    const normalized = value
+      .trim()
+      .toUpperCase()
+      .replace(/[^A-Z]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    if (normalized === 'COMING_SOON') return 'COMING_SOON';
+    if (normalized === 'HIDDEN') return 'HIDDEN';
+    return 'AVAILABLE';
+  }
+
+  private getPlanPriorityFromPosition(position: unknown): number {
+    const normalizedPosition =
+      typeof position === 'string'
+        ? this.normalizePromotionPlanPosition(position)
+        : '';
+
+    if (normalizedPosition === 'above_premium') return 3;
+    if (normalizedPosition === 'above_standard') return 2;
+    if (normalizedPosition === 'standard') return 1;
+    return 0;
+  }
+
+  private async resolvePlanPriorityForSelectedPlan(
+    planName: string | null | undefined,
+  ): Promise<number> {
+    if (!planName) return 0;
+
+    const { data, error } = await this.client
+      .from('promotion_plans')
+      .select('features')
+      .eq('name', planName)
+      .maybeSingle();
+
+    if (!error && data) {
+      const features = this.normalizePromotionPlanFeatures(data.features);
+      const priority = this.getPlanPriorityFromPosition(features.position);
+      if (priority > 0) return priority;
+    }
+
+    if (planName === 'EXCLUSIVE') return 3;
+    if (planName === 'PREMIUM') return 2;
+    if (planName === 'LAUNCH' || planName === 'STANDARD') return 1;
+    return 0;
   }
 
   private normalizePromotionPlanPosition(position: string): string {

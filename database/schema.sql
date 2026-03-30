@@ -123,3 +123,33 @@ COMMENT ON COLUMN users.email_verified IS 'Whether the user has verified their e
 COMMENT ON COLUMN users.is_active IS 'Whether the account is active';
 COMMENT ON COLUMN users.privacy_consent_accepted_at IS 'Timestamp when user accepted privacy policy';
 COMMENT ON COLUMN users.soft_deleted_at IS 'Soft delete timestamp; null means active account';
+
+-- Promotion plans
+-- NOTE: This file is legacy and does not yet reflect the full production schema.
+-- Keep the promotion_plans contract aligned with migrations 010 + 024 + 028.
+-- promotion_plans.expires_at TIMESTAMP WITH TIME ZONE allows admin-configured cutoffs.
+-- Advertisement subscription contract (migrations 013 + 015 + 018 + 026 + 027 + 028):
+-- advertisements.selected_plan VARCHAR(20)
+-- advertisements.selected_duration VARCHAR(10)
+-- advertisements.selected_addons TEXT[] DEFAULT '{}'
+-- advertisements.plan_priority INTEGER NOT NULL DEFAULT 0
+-- advertisements.boosted_until TIMESTAMP WITH TIME ZONE
+-- advertisements.plan_expires_at TIMESTAMP WITH TIME ZONE
+-- If the selected plan has promotion_plans.expires_at, that cutoff overrides duration-based expiry.
+-- Job: cron "downgrade-expired-advertisement-plans" executes
+--       SELECT downgrade_expired_advertisement_plans() every minute.
+
+CREATE TABLE IF NOT EXISTS promotion_plans (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(20) NOT NULL UNIQUE,
+  display_name VARCHAR(80) NOT NULL,
+  price_per_day DECIMAL(10,2) NOT NULL DEFAULT 0,
+  price_per_week DECIMAL(10,2) NOT NULL DEFAULT 0,
+  price_per_month DECIMAL(10,2) NOT NULL DEFAULT 0,
+  features JSONB NOT NULL DEFAULT '{}',
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  availability_status VARCHAR(20) NOT NULL DEFAULT 'AVAILABLE',
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  CONSTRAINT promotion_plans_availability_status_check
+    CHECK (availability_status IN ('AVAILABLE', 'COMING_SOON', 'HIDDEN'))
+);

@@ -157,12 +157,23 @@ const advertisementOptionalFields = [
   // Promotion fields
   body('selectedPlan')
     .optional()
-    .isIn(['STANDARD', 'PREMIUM', 'EXCLUSIVE'])
-    .withMessage('Plan must be STANDARD, PREMIUM or EXCLUSIVE'),
+    .isIn(['STANDARD', 'LAUNCH', 'PREMIUM', 'EXCLUSIVE'])
+    .withMessage('Plan must be STANDARD, LAUNCH, PREMIUM or EXCLUSIVE'),
   body('selectedDuration')
     .optional()
     .isIn(['DAY', 'WEEK', 'MONTH'])
     .withMessage('Duration must be DAY, WEEK or MONTH'),
+  body()
+    .custom((value: { selectedPlan?: string; selectedDuration?: string } | undefined) => {
+      const selectedPlan = value?.selectedPlan?.trim().toUpperCase();
+      const selectedDuration = value?.selectedDuration?.trim().toUpperCase();
+
+      if (selectedPlan && !['STANDARD', 'LAUNCH'].includes(selectedPlan) && !selectedDuration) {
+        throw new Error('Duration is required for paid plans');
+      }
+
+      return true;
+    }),
   body('titleEmoji').optional().trim(),
 ];
 
