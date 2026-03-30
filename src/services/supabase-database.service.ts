@@ -205,6 +205,9 @@ export class SupabaseDatabaseService implements DatabaseService {
     if (user.softDeletedAt !== undefined) {
       row.soft_deleted_at = user.softDeletedAt?.toISOString() || null;
     }
+    if (user.preferredLanguage) {
+      row.preferred_language = user.preferredLanguage;
+    }
 
     return row;
   }
@@ -228,6 +231,7 @@ export class SupabaseDatabaseService implements DatabaseService {
       passwordResetUsedAt: data.password_reset_used_at ? new Date(data.password_reset_used_at) : undefined,
       privacyConsentAcceptedAt: data.privacy_consent_accepted_at ? new Date(data.privacy_consent_accepted_at) : undefined,
       softDeletedAt: data.soft_deleted_at ? new Date(data.soft_deleted_at) : undefined,
+      preferredLanguage: data.preferred_language || 'es',
     };
 
     switch (data.user_type) {

@@ -23,6 +23,7 @@ import { getEmailService } from './email.service';
 import { getAppDatabaseService } from './app-database.service';
 import { hashPassword, comparePassword } from '../utils/password.utils';
 import { generateToken } from '../utils/jwt.utils';
+import { resolveEmailLang } from '../utils/email-translations';
 import { BadRequestError, ForbiddenError, UnauthorizedError } from '../models/error.model';
 
 export class AuthService {
@@ -69,6 +70,7 @@ export class AuthService {
       emailVerificationExpires: verificationExpires,
       photos: [],
       videos: [],
+      preferredLanguage: dto.preferredLanguage || 'es',
     };
 
     const createdUser = await this.db.createUser(user);
@@ -76,6 +78,11 @@ export class AuthService {
     // Send verification email (non-blocking)
     this.emailService.sendVerificationEmail(createdUser, verificationToken).catch((error) => {
       console.error('Failed to send verification email:', error);
+    });
+
+    // Launch credits: add 100 credits + send email if enabled (non-blocking)
+    this.grantLaunchCreditsIfEnabled(createdUser).catch((error) => {
+      console.error('Failed to grant launch credits:', error);
     });
     
     return {
@@ -111,6 +118,7 @@ export class AuthService {
       emailVerificationExpires: verificationExpires,
       photos: [],
       videos: [],
+      preferredLanguage: dto.preferredLanguage || 'es',
     };
 
     const createdUser = await this.db.createUser(user);
@@ -155,6 +163,7 @@ export class AuthService {
       emailVerificationExpires: verificationExpires,
       photos: [],
       videos: [],
+      preferredLanguage: dto.preferredLanguage || 'es',
     };
 
     const createdUser = await this.db.createUser(user);
@@ -201,6 +210,7 @@ export class AuthService {
       emailVerificationExpires: verificationExpires,
       photos: [],
       videos: [],
+      preferredLanguage: dto.preferredLanguage || 'es',
     };
 
     const createdUser = await this.db.createUser(user);
@@ -263,7 +273,8 @@ export class AuthService {
     AuthService.loginOtpStore.set(normalizedEmail, { otp, expiresAt });
 
     // Send OTP email (non-blocking)
-    this.emailService.sendLoginOtpEmail(normalizedEmail, otp).catch((err) => {
+    const otpLang = resolveEmailLang(user.preferredLanguage);
+    this.emailService.sendLoginOtpEmail(normalizedEmail, otp, otpLang).catch((err) => {
       console.error('Failed to send OTP email:', err);
     });
 
@@ -419,6 +430,16 @@ export class AuthService {
       success: true,
       softDeletedAt: softDeletedAt.toISOString(),
     };
+  }
+
+  async heartbeatPresence(userId: string): Promise<{ tracked: boolean }> {
+    const trackedCount = await this.appDb.touchAdvertisementPresence(userId);
+    return { tracked: trackedCount > 0 };
+  }
+
+  async clearPresence(userId: string): Promise<{ tracked: boolean }> {
+    const trackedCount = await this.appDb.clearAdvertisementPresence(userId);
+    return { tracked: trackedCount > 0 };
   }
 
   async verifyEmail(token: string): Promise<AuthResponse> {
@@ -669,5 +690,20 @@ export class AuthService {
 
   private hashResetToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async grantLaunchCreditsIfEnabled(user: User): Promise<void> {
+    const LAUNCH_CREDITS = 100;
+
+    // Check if the LAUNCH promotion plan still exists and hasn't expired
+    const plans = await this.appDb.getPromotionPlans({ includeHidden: true });
+    const launchPlan = plans.find((p) => p.name === 'LAUNCH');
+    if (!launchPlan) return; // No LAUNCH plan configured
+    if (launchPlan.expiresAt && new Date(launchPlan.expiresAt) < new Date()) return; // Plan expired
+
+    await this.appDb.addTransaction(user.id, 'income', 'Créditos de bienvenida (lanzamiento)', LAUNCH_CREDITS);
+    console.log(`💰 ${LAUNCH_CREDITS} launch credits granted to ${user.email}`);
+
+    await this.emailService.sendLaunchCreditsEmail(user, LAUNCH_CREDITS);
   }
 }

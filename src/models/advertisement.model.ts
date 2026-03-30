@@ -14,6 +14,7 @@ export interface Advertisement {
   
   // Status
   isOnline: boolean;
+  currentlyOnline?: boolean;
   isVerified: boolean;
   isPremium: boolean;
   status: 'draft' | 'active' | 'paused' | 'suspended';
@@ -73,6 +74,8 @@ export interface Advertisement {
   
   // Promo
   promotedAt?: Date;
+  lastSeenOnlineAt?: Date;
+  presenceExpiresAt?: Date;
   promoSticker?: string;
   budget?: number;
   

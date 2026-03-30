@@ -6,6 +6,7 @@ import { BadRequestError, NotFoundError } from "../models/error.model";
 import { getEmailService } from "../services/email.service";
 import { generateSetupToken } from "../utils/jwt.utils";
 import { getCloudinaryService } from "../services/cloudinary.service";
+import { resolveEmailLang } from "../utils/email-translations";
 import { config } from "../config";
 import type { PromotionPlanAvailabilityStatus } from "../models/advertisement.model";
 
@@ -27,6 +28,29 @@ const PUBLIC_MENU_SETTING_KEYS = {
   transMenuEnabled: "menu_trans_enabled",
   companionsMenuEnabled: "menu_companions_enabled",
   videosMenuEnabled: "menu_videos_enabled",
+} as const;
+
+const DASHBOARD_MENU_SETTING_KEYS = {
+  dashboardMenuPhotosEnabled: "dashboard_menu_photos_enabled",
+  dashboardMenuReviewsEnabled: "dashboard_menu_reviews_enabled",
+  dashboardMenuVideosEnabled: "dashboard_menu_videos_enabled",
+  dashboardMenuAvailablePromotionsEnabled: "dashboard_menu_available_promotions_enabled",
+  dashboardMenuBoostEnabled: "dashboard_menu_boost_enabled",
+  dashboardMenuBuyCreditsEnabled: "dashboard_menu_buy_credits_enabled",
+  dashboardMenuVideoPromotionEnabled: "dashboard_menu_video_promotion_enabled",
+  dashboardMenuMessagesEnabled: "dashboard_menu_messages_enabled",
+  dashboardMenuNotificationsEnabled: "dashboard_menu_notifications_enabled",
+  dashboardMenuSavedSearchEnabled: "dashboard_menu_saved_search_enabled",
+  dashboardMenuInvoiceEnabled: "dashboard_menu_invoice_enabled",
+  dashboardMenuBalanceEnabled: "dashboard_menu_balance_enabled",
+} as const;
+
+const PHOTO_SETTING_KEYS = {
+  photoVerificationRequired: "photo_verification_required",
+} as const;
+
+const LAUNCH_SETTING_KEYS = {
+  launchCreditsEmailEnabled: "launch_credits_email_enabled",
 } as const;
 
 function parseBooleanAdminSetting(
@@ -386,7 +410,7 @@ export async function updateVerificationStatus(
     // Fetch ad + user email in one join
     const { data: adData, error: adError } = await supabase
       .from("advertisements")
-      .select("id, name, user_id, users!inner(email)")
+      .select("id, name, user_id, users!inner(email, preferred_language)")
       .eq("id", adId)
       .single();
 
@@ -409,8 +433,9 @@ export async function updateVerificationStatus(
       const userEmail = (adData.users as any)?.email;
       if (userEmail) {
         const emailService = getEmailService();
+        const userLang = resolveEmailLang((adData.users as any)?.preferred_language);
         emailService
-          .sendVerificationStatusEmail(userEmail, adData.name, status, comment?.trim())
+          .sendVerificationStatusEmail(userEmail, adData.name, status, comment?.trim(), userLang)
           .catch((e) => console.error("❌ Failed to send verification email:", e));
       }
     }
@@ -554,6 +579,7 @@ export async function getAdminSettings(
         appName: settings["app_name"] ?? "",
         appLogoUrl: settings["app_logo_url"] ?? "",
         appLogoDarkUrl: settings["app_logo_dark_url"] ?? "",
+        appEmailLogoUrl: settings["app_email_logo_url"] ?? "",
         appFaviconUrl: settings["app_favicon_url"] ?? "",
         themeColorFrom: settings["theme_color_from"] ?? "",
         themeColorTo: settings["theme_color_to"] ?? "",
@@ -602,6 +628,64 @@ export async function getAdminSettings(
           settings[PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled],
           true,
         ),
+        photoVerificationRequired: parseBooleanAdminSetting(
+          settings[PHOTO_SETTING_KEYS.photoVerificationRequired],
+          true,
+        ),
+        // Dashboard menu settings
+        dashboardMenuPhotosEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuPhotosEnabled],
+          true,
+        ),
+        dashboardMenuReviewsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuReviewsEnabled],
+          true,
+        ),
+        dashboardMenuVideosEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuVideosEnabled],
+          true,
+        ),
+        dashboardMenuAvailablePromotionsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuAvailablePromotionsEnabled],
+          true,
+        ),
+        dashboardMenuBoostEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuBoostEnabled],
+          true,
+        ),
+        dashboardMenuBuyCreditsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuBuyCreditsEnabled],
+          true,
+        ),
+        dashboardMenuVideoPromotionEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuVideoPromotionEnabled],
+          true,
+        ),
+        dashboardMenuMessagesEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuMessagesEnabled],
+          true,
+        ),
+        dashboardMenuNotificationsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuNotificationsEnabled],
+          true,
+        ),
+        dashboardMenuSavedSearchEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuSavedSearchEnabled],
+          true,
+        ),
+        dashboardMenuInvoiceEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuInvoiceEnabled],
+          true,
+        ),
+        dashboardMenuBalanceEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuBalanceEnabled],
+          true,
+        ),
+        // Launch settings
+        launchCreditsEmailEnabled: parseBooleanAdminSetting(
+          settings[LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled],
+          true,
+        ),
       },
     });
   } catch (err) {
@@ -624,6 +708,7 @@ export async function updateAdminSettings(
       appName,
       appLogoUrl,
       appLogoDarkUrl,
+      appEmailLogoUrl,
       appFaviconUrl,
       themeColorFrom,
       themeColorTo,
@@ -639,6 +724,22 @@ export async function updateAdminSettings(
       transMenuEnabled,
       companionsMenuEnabled,
       videosMenuEnabled,
+      photoVerificationRequired,
+      // Dashboard menu settings
+      dashboardMenuPhotosEnabled,
+      dashboardMenuReviewsEnabled,
+      dashboardMenuVideosEnabled,
+      dashboardMenuAvailablePromotionsEnabled,
+      dashboardMenuBoostEnabled,
+      dashboardMenuBuyCreditsEnabled,
+      dashboardMenuVideoPromotionEnabled,
+      dashboardMenuMessagesEnabled,
+      dashboardMenuNotificationsEnabled,
+      dashboardMenuSavedSearchEnabled,
+      dashboardMenuInvoiceEnabled,
+      dashboardMenuBalanceEnabled,
+      // Launch settings
+      launchCreditsEmailEnabled,
     } = req.body;
 
     const supabase = (getDatabaseService() as any).client;
@@ -670,6 +771,9 @@ export async function updateAdminSettings(
     }
     if (appLogoDarkUrl !== undefined) {
       upserts.push({ key: "app_logo_dark_url", value: appLogoDarkUrl, updated_at: now });
+    }
+    if (appEmailLogoUrl !== undefined) {
+      upserts.push({ key: "app_email_logo_url", value: appEmailLogoUrl, updated_at: now });
     }
     if (appFaviconUrl !== undefined) {
       upserts.push({ key: "app_favicon_url", value: appFaviconUrl, updated_at: now });
@@ -786,6 +890,37 @@ export async function updateAdminSettings(
         updated_at: now,
       });
     }
+    if (photoVerificationRequired !== undefined) {
+      upserts.push({
+        key: PHOTO_SETTING_KEYS.photoVerificationRequired,
+        value: String(
+          parseBooleanAdminInput(
+            photoVerificationRequired,
+            "photoVerificationRequired",
+          ),
+        ),
+        updated_at: now,
+      });
+    }
+    // Dashboard menu settings
+    for (const [field, dbKey] of Object.entries(DASHBOARD_MENU_SETTING_KEYS)) {
+      const value = (req.body as Record<string, unknown>)[field];
+      if (value !== undefined) {
+        upserts.push({
+          key: dbKey,
+          value: String(parseBooleanAdminInput(value, field)),
+          updated_at: now,
+        });
+      }
+    }
+    // Launch settings
+    if (launchCreditsEmailEnabled !== undefined) {
+      upserts.push({
+        key: LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled,
+        value: String(parseBooleanAdminInput(launchCreditsEmailEnabled, "launchCreditsEmailEnabled")),
+        updated_at: now,
+      });
+    }
 
     if (upserts.length > 0) {
       const { error } = await supabase.from("admin_settings").upsert(upserts);
@@ -802,7 +937,7 @@ export async function updateAdminSettings(
 /**
  * POST /api/admin/branding/upload-logo
  * Uploads a logo image to Cloudinary and persists the resulting URL in admin_settings.
- * Body: { image: string (base64), type: 'logo' | 'logo_dark' | 'favicon' }
+ * Body: { image: string (base64), type: 'logo' | 'logo_dark' | 'email_logo' | 'favicon' }
  */
 export async function uploadBrandingLogo(
   req: Request,
@@ -816,14 +951,15 @@ export async function uploadBrandingLogo(
       throw new BadRequestError("Se requiere una imagen en base64");
     }
 
-    const validTypes = ["logo", "logo_dark", "favicon", "topbar"] as const;
+    const validTypes = ["logo", "logo_dark", "email_logo", "favicon", "topbar"] as const;
     if (!validTypes.includes(type)) {
-      throw new BadRequestError("type debe ser 'logo', 'logo_dark', 'favicon' o 'topbar'");
+      throw new BadRequestError("type debe ser 'logo', 'logo_dark', 'email_logo', 'favicon' o 'topbar'");
     }
 
     const keyMap: Record<string, string> = {
       logo: "app_logo_url",
       logo_dark: "app_logo_dark_url",
+      email_logo: "app_email_logo_url",
       favicon: "app_favicon_url",
       topbar: "topbar_bg_image",
     };
@@ -893,6 +1029,8 @@ export async function getBranding(
         PUBLIC_MENU_SETTING_KEYS.transMenuEnabled,
         PUBLIC_MENU_SETTING_KEYS.companionsMenuEnabled,
         PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled,
+        ...Object.values(DASHBOARD_MENU_SETTING_KEYS),
+        LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled,
       ]);
 
     if (error) throw error;
@@ -953,6 +1091,60 @@ export async function getBranding(
         ),
         videosMenuEnabled: parseBooleanAdminSetting(
           settings[PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled],
+          true,
+        ),
+        // Dashboard menu settings
+        dashboardMenuPhotosEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuPhotosEnabled],
+          true,
+        ),
+        dashboardMenuReviewsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuReviewsEnabled],
+          true,
+        ),
+        dashboardMenuVideosEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuVideosEnabled],
+          true,
+        ),
+        dashboardMenuAvailablePromotionsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuAvailablePromotionsEnabled],
+          true,
+        ),
+        dashboardMenuBoostEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuBoostEnabled],
+          true,
+        ),
+        dashboardMenuBuyCreditsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuBuyCreditsEnabled],
+          true,
+        ),
+        dashboardMenuVideoPromotionEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuVideoPromotionEnabled],
+          true,
+        ),
+        dashboardMenuMessagesEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuMessagesEnabled],
+          true,
+        ),
+        dashboardMenuNotificationsEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuNotificationsEnabled],
+          true,
+        ),
+        dashboardMenuSavedSearchEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuSavedSearchEnabled],
+          true,
+        ),
+        dashboardMenuInvoiceEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuInvoiceEnabled],
+          true,
+        ),
+        dashboardMenuBalanceEnabled: parseBooleanAdminSetting(
+          settings[DASHBOARD_MENU_SETTING_KEYS.dashboardMenuBalanceEnabled],
+          true,
+        ),
+        // Launch settings
+        launchCreditsEmailEnabled: parseBooleanAdminSetting(
+          settings[LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled],
           true,
         ),
       },

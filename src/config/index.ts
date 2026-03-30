@@ -2,6 +2,15 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const parseNumberEnv = (value: string | undefined, fallback: number): number => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const clampNumber = (value: number, min: number, max: number): number => {
+  return Math.min(Math.max(value, min), max);
+};
+
 // ══════════════════════════════════════════════════════════════
 // CONFIGURACIÓN DE ENTORNO
 // ══════════════════════════════════════════════════════════════
@@ -60,6 +69,29 @@ export const config = {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
     apiKey: process.env.CLOUDINARY_API_KEY || '',
     apiSecret: process.env.CLOUDINARY_API_SECRET || '',
+    modelImageWatermark: {
+      publicId:
+        process.env.CLOUDINARY_MODEL_WATERMARK_PUBLIC_ID ||
+        'luxxx/branding/u4vxpxq1hbjthvs3085n',
+      opacity: clampNumber(
+        parseNumberEnv(process.env.CLOUDINARY_MODEL_WATERMARK_OPACITY, 45),
+        0,
+        100
+      ),
+      offsetX: Math.max(
+        0,
+        Math.round(parseNumberEnv(process.env.CLOUDINARY_MODEL_WATERMARK_OFFSET_X, 24))
+      ),
+      offsetY: Math.max(
+        0,
+        Math.round(parseNumberEnv(process.env.CLOUDINARY_MODEL_WATERMARK_OFFSET_Y, 24))
+      ),
+      relativeWidth: clampNumber(
+        parseNumberEnv(process.env.CLOUDINARY_MODEL_WATERMARK_RELATIVE_WIDTH, 0.18),
+        0.05,
+        1
+      ),
+    },
   },
   zipcode: {
     apiKey: process.env.ZIPCODEBASE_API_KEY || '',

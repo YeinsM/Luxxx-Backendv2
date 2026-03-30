@@ -230,6 +230,50 @@ export class AuthController {
     }
   }
 
+  async heartbeatPresence(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) {
+        throw new BadRequestError('User ID not found');
+      }
+
+      const result = await authService.heartbeatPresence(userId);
+      const response: ApiResponse = {
+        success: true,
+        data: result,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async clearPresence(
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> {
+    try {
+      const userId = (req as any).user?.userId;
+      if (!userId) {
+        throw new BadRequestError('User ID not found');
+      }
+
+      const result = await authService.clearPresence(userId);
+      const response: ApiResponse = {
+        success: true,
+        data: result,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async deleteMyAccount(
     req: Request,
     res: Response,

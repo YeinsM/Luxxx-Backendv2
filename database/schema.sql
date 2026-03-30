@@ -135,9 +135,15 @@ COMMENT ON COLUMN users.soft_deleted_at IS 'Soft delete timestamp; null means ac
 -- advertisements.plan_priority INTEGER NOT NULL DEFAULT 0
 -- advertisements.boosted_until TIMESTAMP WITH TIME ZONE
 -- advertisements.plan_expires_at TIMESTAMP WITH TIME ZONE
+-- advertisements.last_seen_online_at TIMESTAMP WITH TIME ZONE
+-- advertisements.presence_expires_at TIMESTAMP WITH TIME ZONE
 -- If the selected plan has promotion_plans.expires_at, that cutoff overrides duration-based expiry.
 -- Job: cron "downgrade-expired-advertisement-plans" executes
 --       SELECT downgrade_expired_advertisement_plans() every minute.
+-- Real presence contract (migration 029):
+--   visible profile = advertisements.is_online = true
+--   currently online = visible profile + presence_expires_at > NOW()
+--   last seen online = last_seen_online_at
 
 CREATE TABLE IF NOT EXISTS promotion_plans (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),

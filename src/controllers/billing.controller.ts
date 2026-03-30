@@ -160,4 +160,18 @@ export class BillingController {
       next(error);
     }
   }
+
+  /** GET /api/billing/ranking/:adId — Get the model's ranking position in their category */
+  async getRanking(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const ranking = await db.getAdvertisementRanking(req.params.adId, userId);
+      const response: ApiResponse = { success: true, data: ranking };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
 }

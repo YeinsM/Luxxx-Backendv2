@@ -1,6 +1,51 @@
 import { body } from 'express-validator';
 import { normalizeAdvertisementGender } from '../utils/gender.utils';
 
+const ESCORT_SERVICE_NAMES = new Set(['escortInbound', 'escort']);
+const EXCLUSIVE_SERVICE_NAMES = new Set(['eroticMassage', 'bdsm', 'virtualSex', 'redLights']);
+
+function validateExclusiveAdvertisementServices(services: unknown): boolean {
+  if (services === undefined || services === null) {
+    return true;
+  }
+
+  if (!Array.isArray(services)) {
+    throw new Error('Services must be an array');
+  }
+
+  const selectedServiceNames = new Set(
+    services
+      .map((service) =>
+        typeof service?.serviceName === 'string'
+          ? service.serviceName.trim()
+          : ''
+      )
+      .filter(Boolean)
+      .filter((serviceName) =>
+        ESCORT_SERVICE_NAMES.has(serviceName) || EXCLUSIVE_SERVICE_NAMES.has(serviceName)
+      )
+  );
+
+  const selectedExclusiveServices = [...selectedServiceNames].filter((serviceName) =>
+    EXCLUSIVE_SERVICE_NAMES.has(serviceName)
+  );
+
+  if (selectedExclusiveServices.length > 1) {
+    throw new Error('Erotic massage, BDSM, Virtual sex and Red lights are mutually exclusive');
+  }
+
+  if (
+    selectedExclusiveServices.length === 1 &&
+    [...selectedServiceNames].some((serviceName) => ESCORT_SERVICE_NAMES.has(serviceName))
+  ) {
+    throw new Error(
+      'Erotic massage, BDSM, Virtual sex and Red lights cannot be combined with Escort or Escort inbound'
+    );
+  }
+
+  return true;
+}
+
 export const registerEscortValidation = [
   body('name')
     .trim()
@@ -129,6 +174,45 @@ export const resetPasswordValidation = [
     .withMessage('New password must be at least 6 characters'),
 ];
 
+export const submitServiceSuggestionValidation = [
+  body('message')
+    .trim()
+    .isLength({ min: 3, max: 1000 })
+    .withMessage('Suggestion message must be between 3 and 1000 characters'),
+  body('selectedServices')
+    .optional()
+    .isArray({ max: 100 })
+    .withMessage('Selected services must be an array'),
+  body('selectedServices.*')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 120 })
+    .withMessage('Each selected service must be a valid string'),
+  body('selectedServiceCategories')
+    .optional()
+    .isArray({ max: 20 })
+    .withMessage('Selected service categories must be an array'),
+  body('selectedServiceCategories.*')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ min: 1, max: 120 })
+    .withMessage('Each selected service category must be a valid string'),
+  body('profileName')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 120 })
+    .withMessage('Profile name is too long'),
+  body('advertisementTitle')
+    .optional()
+    .isString()
+    .trim()
+    .isLength({ max: 160 })
+    .withMessage('Advertisement title is too long'),
+];
+
 const advertisementOptionalFields = [
   body('category').optional().trim(),
   body('gender')
@@ -163,6 +247,9 @@ const advertisementOptionalFields = [
     .optional()
     .isIn(['DAY', 'WEEK', 'MONTH'])
     .withMessage('Duration must be DAY, WEEK or MONTH'),
+  body('services')
+    .optional()
+    .custom(validateExclusiveAdvertisementServices),
   body()
     .custom((value: { selectedPlan?: string; selectedDuration?: string } | undefined) => {
       const selectedPlan = value?.selectedPlan?.trim().toUpperCase();

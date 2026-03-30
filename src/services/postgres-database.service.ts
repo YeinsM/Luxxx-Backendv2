@@ -154,6 +154,9 @@ export class PostgresDatabaseService implements DatabaseService {
     if (user.softDeletedAt !== undefined) {
       base.soft_deleted_at = user.softDeletedAt?.toISOString() || null;
     }
+    if (user.preferredLanguage) {
+      base.preferred_language = user.preferredLanguage;
+    }
 
     switch (user.userType) {
       case UserType.ESCORT:
@@ -213,6 +216,7 @@ export class PostgresDatabaseService implements DatabaseService {
       address: 'address',
       website: 'website',
       openingHours: 'opening_hours',
+      preferredLanguage: 'preferred_language',
     };
 
     for (const [camelKey, value] of Object.entries(updates)) {
@@ -256,6 +260,7 @@ export class PostgresDatabaseService implements DatabaseService {
       role: (data.role ?? 'USER') as 'USER' | 'ADMIN',
       photos: [],
       videos: [],
+      preferredLanguage: data.preferred_language || 'es',
     };
 
     switch (data.user_type) {

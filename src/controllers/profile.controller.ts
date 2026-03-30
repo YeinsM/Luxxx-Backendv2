@@ -65,7 +65,7 @@ export class ProfileController {
   /** GET /api/profiles/:id — Get profile by ID */
   async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const ad = await db.getAdvertisementById(req.params.id);
+      const ad = await db.getPublicAdvertisementById(req.params.id);
       if (!ad) throw new NotFoundError('Profile not found');
 
       const shouldCountView = req.query.viewSource === 'search';

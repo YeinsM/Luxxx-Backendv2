@@ -24,6 +24,7 @@ import {
 import { InternalServerError, NotFoundError } from '../models/error.model';
 import { normalizeAdvertisementGender } from '../utils/gender.utils';
 import { sseService } from '../utils/sse';
+import { getCloudinaryService } from './cloudinary.service';
 
 type PromotionVideoOwner = {
   advertisementId: string;
@@ -35,6 +36,11 @@ type PromotionVideoOwner = {
   gender?: string;
   profileImageUrl?: string;
 };
+
+const ADVERTISEMENT_PRESENCE_TTL_MS = 2 * 60 * 1000;
+const PHOTO_VERIFICATION_REQUIRED_SETTING_KEY = 'photo_verification_required';
+const cloudinaryService = getCloudinaryService();
+type PhotoVerificationStatus = PhotoVerification['status'];
 
 export class AppDatabaseService {
   private client: SupabaseClient;
@@ -53,7 +59,13 @@ export class AppDatabaseService {
   // ============================================================
 
   async createAdvertisement(userId: string, dto: CreateAdvertisementDto): Promise<Advertisement> {
-    const { services, rates, ...adData } = dto;
+    const photoVerificationRequired = await this.isPhotoVerificationRequiredForNewUploads();
+    const sanitizedDto = await this.sanitizeAdvertisementPhotoSelection(
+      userId,
+      dto,
+      photoVerificationRequired,
+    );
+    const { services, rates, ...adData } = sanitizedDto;
 
     // Set status to 'active' by default, visibility is controlled by isOnline
     const row = this.serializeAd({ ...adData, userId, status: 'active' } as any);
@@ -120,6 +132,19 @@ export class AppDatabaseService {
     return ad;
   }
 
+  async getPublicAdvertisementById(id: string): Promise<Advertisement | null> {
+    const ad = await this.getAdvertisementById(id);
+    if (!ad) return null;
+
+    const photoVerificationRequired = await this.isPhotoVerificationRequiredForNewUploads();
+    await this.applyPublicModelPhotoDeliveryToAdvertisement(
+      ad,
+      ad.photos || [],
+      photoVerificationRequired,
+    );
+    return ad;
+  }
+
   async getAdvertisementByUserId(userId: string): Promise<Advertisement | null> {
     const { data, error } = await this.client
       .from('advertisements')
@@ -141,7 +166,13 @@ export class AppDatabaseService {
   }
 
   async updateAdvertisement(id: string, userId: string, dto: Partial<CreateAdvertisementDto>): Promise<Advertisement> {
-    const { services, rates, ...adData } = dto;
+    const photoVerificationRequired = await this.isPhotoVerificationRequiredForNewUploads();
+    const sanitizedDto = await this.sanitizeAdvertisementPhotoSelection(
+      userId,
+      dto,
+      photoVerificationRequired,
+    );
+    const { services, rates, ...adData } = sanitizedDto;
     const row = this.serializeAd(adData as any);
     if ((adData as any).selectedPlan !== undefined) {
       row.plan_priority = await this.resolvePlanPriorityForSelectedPlan((adData as any).selectedPlan);
@@ -317,12 +348,19 @@ export class AppDatabaseService {
 
     if (error) throw new InternalServerError(`Failed to search profiles: ${error.message}`);
 
+    const photoVerificationRequired = await this.isPhotoVerificationRequiredForNewUploads();
+
     const profiles = await Promise.all(
       (data || []).map(async (row: any) => {
         const ad = this.deserializeAd(row);
         ad.services = await this.getAdServices(ad.id);
         ad.rates = await this.getAdRates(ad.id);
-        ad.photos = await this.getUserMedia(ad.userId, 'image');
+        const sourcePhotos = await this.getUserMedia(ad.userId, 'image');
+        await this.applyPublicModelPhotoDeliveryToAdvertisement(
+          ad,
+          sourcePhotos,
+          photoVerificationRequired,
+        );
         return ad;
       })
     );
@@ -345,14 +383,14 @@ export class AppDatabaseService {
   }> {
     const { data, error } = await this.client
       .from('advertisements')
-      .select('is_online,is_premium,rating,category')
-      .eq('is_online', true); // Only count online advertisements
+      .select('is_online,is_premium,rating,category,presence_expires_at')
+      .eq('is_online', true); // Count published advertisements, then derive real-time online state
 
     if (error) throw new InternalServerError('Failed to get stats');
 
     const rows = data || [];
     const total = rows.length;
-    const online = rows.filter((r: any) => r.is_online).length;
+    const online = rows.filter((r: any) => this.isAdvertisementCurrentlyOnlineRow(r)).length;
     const premium = rows.filter((r: any) => r.is_premium).length;
     const avgRating = total > 0 ? rows.reduce((sum: number, r: any) => sum + (parseFloat(r.rating) || 0), 0) / total : 0;
 
@@ -395,6 +433,46 @@ export class AppDatabaseService {
     if (data) {
       await this.client.from('advertisements').update({ view_count: (data.view_count || 0) + 1 }).eq('id', id);
     }
+  }
+
+  async touchAdvertisementPresence(userId: string): Promise<number> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + ADVERTISEMENT_PRESENCE_TTL_MS).toISOString();
+
+    const { data, error } = await this.client
+      .from('advertisements')
+      .update({
+        last_seen_online_at: now.toISOString(),
+        presence_expires_at: expiresAt,
+      })
+      .eq('user_id', userId)
+      .neq('status', 'deleted')
+      .select('id');
+
+    if (error) {
+      throw new InternalServerError(`Failed to update advertisement presence: ${error.message}`);
+    }
+
+    return (data || []).length;
+  }
+
+  async clearAdvertisementPresence(userId: string): Promise<number> {
+    const now = new Date().toISOString();
+
+    const { data, error } = await this.client
+      .from('advertisements')
+      .update({
+        presence_expires_at: now,
+      })
+      .eq('user_id', userId)
+      .neq('status', 'deleted')
+      .select('id');
+
+    if (error) {
+      throw new InternalServerError(`Failed to clear advertisement presence: ${error.message}`);
+    }
+
+    return (data || []).length;
   }
 
   // ============================================================
@@ -1125,6 +1203,11 @@ export class AppDatabaseService {
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
   }
 
+  async isPhotoVerificationRequiredForNewUploads(): Promise<boolean> {
+    const value = await this.getAdminSetting(PHOTO_VERIFICATION_REQUIRED_SETTING_KEY);
+    return this.parseBooleanAdminSetting(value, true);
+  }
+
   // ============================================================
   // BOOST
   // ============================================================
@@ -1155,6 +1238,47 @@ export class AppDatabaseService {
     if (error || !data) throw new NotFoundError('Advertisement not found');
     const boostedAt = data.boosted_until ? new Date(data.boosted_until) : null;
     return { boostedAt };
+  }
+
+  async getAdvertisementRanking(adId: string, userId: string): Promise<{
+    position: number;
+    totalInCategory: number;
+    page: number;
+    category: string;
+  }> {
+    // Get the ad's selected_plan and category
+    const { data: ad, error: adError } = await this.client
+      .from('advertisements')
+      .select('category, selected_plan')
+      .eq('id', adId)
+      .eq('user_id', userId)
+      .single();
+
+    if (adError || !ad) throw new NotFoundError('Advertisement not found');
+
+    const selectedPlan = (ad.selected_plan as string) || 'STANDARD';
+
+    // Get all online ads with the same promotion plan, sorted by the same algorithm as searchProfiles
+    const { data: ranked, error: rankError } = await this.client
+      .from('advertisements')
+      .select('id')
+      .eq('is_online', true)
+      .eq('selected_plan', selectedPlan)
+      .order('plan_priority', { ascending: false })
+      .order('boosted_until', { ascending: false, nullsFirst: false })
+      .order('promoted_at', { ascending: false, nullsFirst: false })
+      .order('created_at', { ascending: false });
+
+    if (rankError) throw new InternalServerError('Failed to compute ranking');
+
+    const rows = ranked || [];
+    const totalInCategory = rows.length;
+    const index = rows.findIndex((r: any) => r.id === adId);
+    const position = index >= 0 ? index + 1 : totalInCategory + 1;
+    const perPage = 30;
+    const page = Math.ceil(position / perPage);
+
+    return { position, totalInCategory, page, category: selectedPlan };
   }
 
   // ============================================================
@@ -1431,19 +1555,37 @@ export class AppDatabaseService {
 
     const { data: photoRows } = await this.client
       .from('user_media')
-      .select('user_id, url')
+      .select('user_id, url, public_id')
       .eq('resource_type', 'image')
       .in('user_id', userIds);
 
-    const photosByUser = new Map<string, string[]>();
+    const photoVerificationRequired = await this.isPhotoVerificationRequiredForNewUploads();
+    const verificationStatusMap = await this.getPhotoVerificationStatusMap(
+      (photoRows || []).map((row: any) => row.public_id),
+      photoVerificationRequired,
+    );
+
+    const photosByUser = new Map<string, Array<{ url: string; publicId?: string }>>();
     for (const row of photoRows || []) {
-      photosByUser.set(row.user_id, [...(photosByUser.get(row.user_id) || []), row.url]);
+      photosByUser.set(row.user_id, [
+        ...(photosByUser.get(row.user_id) || []),
+        { url: row.url, publicId: row.public_id || undefined },
+      ]);
     }
 
     for (const owner of ownerRows) {
       const selectedPhotos = Array.isArray(owner.selected_photo_ids) ? owner.selected_photo_ids : [];
-      const availablePhotos = photosByUser.get(owner.user_id) || [];
-      profileImages.set(owner.user_id, selectedPhotos[0] || availablePhotos[0]);
+      const availablePhotos = (photosByUser.get(owner.user_id) || []).filter((photo) =>
+        this.isPhotoSelectableForAdvertisement(
+          photo.publicId ? verificationStatusMap.get(photo.publicId) : undefined
+        )
+      );
+      const selectedPhoto =
+        availablePhotos.find((photo) => selectedPhotos.includes(photo.url)) || availablePhotos[0];
+      profileImages.set(
+        owner.user_id,
+        this.buildPublicModelPhotoUrl(selectedPhoto?.publicId, selectedPhoto?.url)
+      );
     }
 
     return profileImages;
@@ -1530,6 +1672,12 @@ export class AppDatabaseService {
     if (ad.workingHours !== undefined) row.working_hours = ad.workingHours;
     if (ad.phone !== undefined) row.phone = ad.phone;
     if (ad.phoneVerified !== undefined) row.phone_verified = ad.phoneVerified;
+    if (ad.lastSeenOnlineAt !== undefined) {
+      row.last_seen_online_at = ad.lastSeenOnlineAt ? new Date(ad.lastSeenOnlineAt).toISOString() : null;
+    }
+    if (ad.presenceExpiresAt !== undefined) {
+      row.presence_expires_at = ad.presenceExpiresAt ? new Date(ad.presenceExpiresAt).toISOString() : null;
+    }
     if (ad.contactByPhone !== undefined) row.contact_by_phone = ad.contactByPhone;
     if (ad.contactByWhatsApp !== undefined) row.contact_by_whatsapp = ad.contactByWhatsApp;
     if (ad.contactBySignal !== undefined) row.contact_by_signal = ad.contactBySignal;
@@ -1562,6 +1710,7 @@ export class AppDatabaseService {
 
   private deserializeAd(data: any): Advertisement {
     const normalizedGender = normalizeAdvertisementGender(data.gender);
+    const currentlyOnline = this.isAdvertisementCurrentlyOnlineRow(data);
 
     return {
       id: data.id,
@@ -1571,6 +1720,7 @@ export class AppDatabaseService {
       description: data.description,
       category: data.category,
       isOnline: data.is_online,
+      currentlyOnline,
       isVerified: data.is_verified,
       isPremium: data.is_premium,
       status: data.status,
@@ -1605,6 +1755,8 @@ export class AppDatabaseService {
       workingHours: data.working_hours,
       phone: data.phone,
       phoneVerified: data.phone_verified,
+      lastSeenOnlineAt: data.last_seen_online_at ? new Date(data.last_seen_online_at) : undefined,
+      presenceExpiresAt: data.presence_expires_at ? new Date(data.presence_expires_at) : undefined,
       contactByPhone: data.contact_by_phone ?? true,
       contactByWhatsApp: data.contact_by_whatsapp ?? true,
       contactBySignal: data.contact_by_signal ?? true,
@@ -1658,6 +1810,153 @@ export class AppDatabaseService {
     };
   }
 
+  private buildPublicModelPhotoMedia(media: UserMedia[]): UserMedia[] {
+    return media.map((item) => ({
+      ...item,
+      url: this.buildPublicModelPhotoUrl(item.publicId, item.url),
+    }));
+  }
+
+  private buildPublicModelPhotoUrl(publicId?: string, fallbackUrl?: string): string {
+    if (!publicId) return fallbackUrl || '';
+    return cloudinaryService.buildImageUrl(publicId, true);
+  }
+
+  private parseBooleanAdminSetting(value: string | null | undefined, defaultValue: boolean): boolean {
+    if (value === undefined || value === null || value.trim() === '') {
+      return defaultValue;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+
+    return defaultValue;
+  }
+
+  private async sanitizeAdvertisementPhotoSelection<T extends Partial<CreateAdvertisementDto>>(
+    userId: string,
+    dto: T,
+    photoVerificationRequired: boolean,
+  ): Promise<T> {
+    if (!Object.prototype.hasOwnProperty.call(dto, 'selectedPhotoIds')) {
+      return dto;
+    }
+
+    const selectedPhotoIds = Array.isArray((dto as any).selectedPhotoIds)
+      ? ((dto as any).selectedPhotoIds as string[])
+      : [];
+
+    return {
+      ...dto,
+      selectedPhotoIds: await this.filterSelectablePhotoUrls(
+        userId,
+        selectedPhotoIds,
+        photoVerificationRequired,
+      ),
+    };
+  }
+
+  private async applyPublicModelPhotoDeliveryToAdvertisement(
+    ad: Advertisement,
+    sourcePhotos: UserMedia[],
+    photoVerificationRequired: boolean,
+  ): Promise<void> {
+    const selectablePhotos = await this.filterSelectablePhotos(
+      sourcePhotos,
+      photoVerificationRequired,
+    );
+    const selectedPhotoUrls = Array.isArray(ad.selectedPhotoIds) ? ad.selectedPhotoIds : [];
+    const scopedPhotos =
+      selectedPhotoUrls.length > 0
+        ? selectablePhotos.filter((photo) => selectedPhotoUrls.includes(photo.url))
+        : selectablePhotos;
+
+    const deliveredPhotos = this.buildPublicModelPhotoMedia(scopedPhotos);
+    ad.photos = deliveredPhotos;
+    ad.selectedPhotoIds = deliveredPhotos.map((photo) => photo.url);
+  }
+
+  private async filterSelectablePhotoUrls(
+    userId: string,
+    selectedPhotoUrls: string[],
+    photoVerificationRequired: boolean,
+  ): Promise<string[]> {
+    if (selectedPhotoUrls.length === 0) return [];
+
+    const allPhotos = await this.getUserMedia(userId, 'image');
+    const photoByUrl = new Map(allPhotos.map((photo) => [photo.url, photo]));
+    const selectedPhotos = selectedPhotoUrls
+      .map((url) => photoByUrl.get(url))
+      .filter((photo): photo is UserMedia => Boolean(photo));
+
+    const selectablePhotos = await this.filterSelectablePhotos(
+      selectedPhotos,
+      photoVerificationRequired,
+    );
+    const selectableUrls = new Set(selectablePhotos.map((photo) => photo.url));
+    return selectedPhotoUrls.filter((url) => selectableUrls.has(url));
+  }
+
+  private async filterSelectablePhotos(
+    photos: UserMedia[],
+    photoVerificationRequired: boolean,
+  ): Promise<UserMedia[]> {
+    if (photos.length === 0) return [];
+
+    const verificationStatusMap = await this.getPhotoVerificationStatusMap(
+      photos.map((photo) => photo.publicId),
+      photoVerificationRequired,
+    );
+
+    return photos.filter((photo) =>
+      this.isPhotoSelectableForAdvertisement(verificationStatusMap.get(photo.publicId))
+    );
+  }
+
+  private async getPhotoVerificationStatusMap(
+    publicIds: Array<string | undefined>,
+    photoVerificationRequired: boolean,
+  ): Promise<Map<string, PhotoVerificationStatus>> {
+    if (!photoVerificationRequired) {
+      return new Map();
+    }
+
+    const normalizedPublicIds = Array.from(
+      new Set(
+        publicIds
+          .map((publicId) => publicId?.trim())
+          .filter((publicId): publicId is string => Boolean(publicId))
+      )
+    );
+
+    if (normalizedPublicIds.length === 0) return new Map();
+
+    const { data, error } = await this.client
+      .from('photo_verifications')
+      .select('public_id, status')
+      .in('public_id', normalizedPublicIds);
+
+    if (error) return new Map();
+
+    const statusMap = new Map<string, PhotoVerificationStatus>();
+    for (const row of data || []) {
+      if (row.public_id) {
+        statusMap.set(row.public_id, row.status as PhotoVerificationStatus);
+      }
+    }
+
+    return statusMap;
+  }
+
+  private isPhotoSelectableForAdvertisement(status?: PhotoVerificationStatus): boolean {
+    return !status || status === 'VERIFIED';
+  }
+
   private deserializePromotionVideo(data: any): PromotionVideo {
     return {
       id: data.id,
@@ -1677,6 +1976,15 @@ export class AppDatabaseService {
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
     };
+  }
+
+  private isAdvertisementCurrentlyOnlineRow(data: { is_online?: boolean; presence_expires_at?: string | null }): boolean {
+    if (!data?.is_online || !data.presence_expires_at) {
+      return false;
+    }
+
+    const expiresAt = new Date(data.presence_expires_at).getTime();
+    return Number.isFinite(expiresAt) && expiresAt > Date.now();
   }
 
   private deserializeReview(data: any): Review {

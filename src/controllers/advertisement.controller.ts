@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import { getAppDatabaseService } from '../services/app-database.service';
+import { getEmailService } from '../services/email.service';
 import { ApiResponse } from '../models/user.model';
-import { BadRequestError, NotFoundError } from '../models/error.model';
+import { BadRequestError, InternalServerError, NotFoundError } from '../models/error.model';
 
 const db = getAppDatabaseService();
 
@@ -55,12 +56,70 @@ export class AdvertisementController {
   /** GET /api/advertisements/:id — Get advertisement by ID */
   async getById(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const ad = await db.getAdvertisementById(req.params.id);
+      const ad = await db.getPublicAdvertisementById(req.params.id);
       if (!ad) throw new NotFoundError('Advertisement not found');
 
       const response: ApiResponse = {
         success: true,
         data: ad,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/advertisements/service-suggestion — Send missing-service suggestion to admin alerts */
+  async submitServiceSuggestion(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) throw new BadRequestError(errors.array()[0].msg);
+
+      const userId = (req as AuthRequest).user?.userId;
+      const userEmail = (req as AuthRequest).user?.email;
+      if (!userId || !userEmail) throw new BadRequestError('User not found');
+
+      const {
+        message,
+        selectedServices = [],
+        selectedServiceCategories = [],
+        profileName,
+        advertisementTitle,
+      } = req.body as {
+        message: string;
+        selectedServices?: string[];
+        selectedServiceCategories?: string[];
+        profileName?: string;
+        advertisementTitle?: string;
+      };
+
+      const alertEmail = await db.getAdminSetting('security_alert_email');
+      if (!alertEmail) {
+        throw new BadRequestError('No security alert email is configured in administration');
+      }
+
+      const existingAd = await db.getAdvertisementByUserId(userId);
+      const sent = await getEmailService().sendServiceSuggestionAlert(alertEmail, {
+        userId,
+        userEmail,
+        profileName: profileName?.trim() || existingAd?.name || '',
+        advertisementTitle: advertisementTitle?.trim() || existingAd?.title || '',
+        selectedServices: Array.isArray(selectedServices) ? selectedServices : [],
+        selectedServiceCategories: Array.isArray(selectedServiceCategories)
+          ? selectedServiceCategories
+          : [],
+        message: message.trim(),
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!sent) {
+        throw new InternalServerError('Could not send the service suggestion email');
+      }
+
+      const response: ApiResponse<{ sent: boolean }> = {
+        success: true,
+        message: 'Service suggestion sent successfully',
+        data: { sent: true },
       };
       res.status(200).json(response);
     } catch (error) {

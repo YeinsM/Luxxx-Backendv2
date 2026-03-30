@@ -106,9 +106,16 @@ export const uploadMyPhotos = async (req: Request, res: Response): Promise<void>
       newPhotos.push(media);
     }
 
-    // If the user already has a published ad, submit new photos for verification
+    const photoVerificationRequired = await db.isPhotoVerificationRequiredForNewUploads();
+
+    // If photo verification is enabled for the current workflow and the user already
+    // has a published ad, queue the new photos for admin review before they can be
+    // used in the advertisement.
     const existingAd = await db.getAdvertisementByUserId(userId);
-    if (existingAd && existingAd.isOnline) {
+    const requiresVerificationForThisUpload =
+      photoVerificationRequired && !!(existingAd && existingAd.isOnline);
+
+    if (requiresVerificationForThisUpload) {
       await db.submitPhotosForVerification(
         existingAd.id,
         userId,
@@ -119,7 +126,7 @@ export const uploadMyPhotos = async (req: Request, res: Response): Promise<void>
     res.status(200).json({
       message: `${newPhotos.length} photos uploaded successfully`,
       data: newPhotos,
-      pendingVerification: !!(existingAd && existingAd.isOnline),
+      pendingVerification: requiresVerificationForThisUpload,
     });
   } catch (error: any) {
     console.error('Upload photos error:', error);
@@ -301,6 +308,12 @@ export const getMyPhotoVerifications = async (req: Request, res: Response): Prom
   try {
     const userId = (req as AuthRequest).user?.userId;
     if (!userId) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+    const photoVerificationRequired = await db.isPhotoVerificationRequiredForNewUploads();
+    if (!photoVerificationRequired) {
+      res.status(200).json({ success: true, data: [] });
+      return;
+    }
 
     const verifications = await db.getPhotoVerificationsForUser(userId);
     res.status(200).json({ success: true, data: verifications });

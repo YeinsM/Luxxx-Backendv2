@@ -118,6 +118,28 @@ router.post(
 );
 
 /**
+ * @route   POST /api/auth/presence/heartbeat
+ * @desc    Mark the current authenticated session as online for public presence
+ * @access  Private
+ */
+router.post(
+  '/presence/heartbeat',
+  authMiddleware,
+  authController.heartbeatPresence.bind(authController)
+);
+
+/**
+ * @route   POST /api/auth/presence/offline
+ * @desc    Mark the current authenticated session as offline for public presence
+ * @access  Private
+ */
+router.post(
+  '/presence/offline',
+  authMiddleware,
+  authController.clearPresence.bind(authController)
+);
+
+/**
  * @route   DELETE /api/auth/me
  * @desc    Soft-delete current user account
  * @access  Private

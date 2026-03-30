@@ -35,6 +35,7 @@ export interface BaseUser {
   passwordResetUsedAt?: Date;
   photos: MediaFile[];
   videos: MediaFile[];
+  preferredLanguage?: string;
 }
 
 export interface EscortUser extends BaseUser {
@@ -80,6 +81,7 @@ export interface RegisterEscortDto {
   phone: string;
   city: string;
   dateOfBirth: string; // ISO date string YYYY-MM-DD — age is computed from this
+  preferredLanguage?: string;
 }
 
 export interface RegisterMemberDto {
@@ -87,6 +89,7 @@ export interface RegisterMemberDto {
   email: string;
   password: string;
   city: string;
+  preferredLanguage?: string;
 }
 
 export interface RegisterAgencyDto {
@@ -96,6 +99,7 @@ export interface RegisterAgencyDto {
   phone: string;
   city: string;
   website?: string;
+  preferredLanguage?: string;
 }
 
 export interface RegisterClubDto {
@@ -107,6 +111,7 @@ export interface RegisterClubDto {
   city: string;
   website?: string;
   openingHours?: string;
+  preferredLanguage?: string;
 }
 
 export interface LoginDto {

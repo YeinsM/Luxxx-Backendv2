@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { AdvertisementController } from '../controllers/advertisement.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
-import { createAdvertisementValidation, updateAdvertisementValidation } from '../middleware/validation.middleware';
+import {
+  createAdvertisementValidation,
+  submitServiceSuggestionValidation,
+  updateAdvertisementValidation,
+} from '../middleware/validation.middleware';
 
 const router = Router();
 const controller = new AdvertisementController();
@@ -24,6 +28,18 @@ router.post(
  * @access  Private
  */
 router.get('/mine', authMiddleware, controller.getMine.bind(controller));
+
+/**
+ * @route   POST /api/advertisements/service-suggestion
+ * @desc    Send a missing-service suggestion to the admin alert inbox
+ * @access  Private
+ */
+router.post(
+  '/service-suggestion',
+  authMiddleware,
+  submitServiceSuggestionValidation,
+  controller.submitServiceSuggestion.bind(controller)
+);
 
 /**
  * @route   GET /api/advertisements/:id

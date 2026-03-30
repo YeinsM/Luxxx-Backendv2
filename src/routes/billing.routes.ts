@@ -61,4 +61,11 @@ router.get('/boost/:adId', authMiddleware, controller.getBoostStatus.bind(contro
  */
 router.post('/boost/:adId', authMiddleware, controller.boost.bind(controller));
 
+/**
+ * @route   GET /api/billing/ranking/:adId
+ * @desc    Get the model's ranking position in their category
+ * @access  Private
+ */
+router.get('/ranking/:adId', authMiddleware, controller.getRanking.bind(controller));
+
 export default router;

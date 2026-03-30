@@ -19,16 +19,27 @@ export interface UploadResult {
   thumbnailUrl?: string; // For videos
 }
 
+type ImageCropMode = 'scale' | 'fit' | 'fill' | 'pad' | 'thumb';
+
+export interface ImageUrlOptions {
+  width?: number;
+  height?: number;
+  crop?: ImageCropMode;
+  quality?: number | 'auto';
+  format?: string;
+}
+
 export interface UploadOptions {
   folder?: string;
-  transformation?: {
-    width?: number;
-    height?: number;
-    crop?: 'scale' | 'fit' | 'fill' | 'pad' | 'thumb';
-    quality?: number | 'auto';
-    format?: string;
-  };
+  transformation?: ImageUrlOptions;
   tags?: string[];
+}
+
+export interface BuildImageUrlOptions extends ImageUrlOptions {
+  watermarkOpacity?: number;
+  watermarkOffsetX?: number;
+  watermarkOffsetY?: number;
+  watermarkRelativeWidth?: number;
 }
 
 export class CloudinaryService {
@@ -178,24 +189,48 @@ export class CloudinaryService {
   }
 
   /**
-   * Get optimized image URL with transformations
+   * Build a delivery URL for an image without mutating the original asset in Cloudinary.
+   * When isModel = true, the generated URL includes a watermark overlay that Cloudinary
+   * applies only at render time.
+   *
+   * Example:
+   *   buildImageUrl('lusty/users/123/photos/sample', true)
+   *   -> https://res.cloudinary.com/.../image/upload/f_auto,q_auto/...overlay.../lusty/users/123/photos/sample
+   *
    * @param publicId Public ID of the image
-   * @param transformation Transformation options
-   * @returns Optimized image URL
+   * @param isModel Whether the image belongs to a model/public profile
+   * @param options Optional delivery settings for resize/quality/watermark tuning
+   * @returns Cloudinary delivery URL
    */
-  getOptimizedUrl(
+  buildImageUrl(
     publicId: string,
-    transformation?: {
-      width?: number;
-      height?: number;
-      crop?: 'scale' | 'fit' | 'fill' | 'pad' | 'thumb';
-      quality?: number | 'auto';
-      format?: string;
-    }
+    isModel: boolean,
+    options: BuildImageUrlOptions = {}
   ): string {
-    return cloudinary.url(publicId, {
-      transformation: transformation || { quality: 'auto', fetch_format: 'auto' },
+    const normalizedPublicId = publicId?.trim();
+    if (!normalizedPublicId) return '';
+
+    const transformation = [this.buildBaseImageTransformation(options)];
+
+    if (isModel) {
+      const watermarkTransformations = this.buildModelWatermarkTransformation(options);
+      if (watermarkTransformations.length > 0) {
+        transformation.push(...watermarkTransformations);
+      }
+    }
+
+    return cloudinary.url(normalizedPublicId, {
+      secure: true,
+      transformation,
     });
+  }
+
+  /**
+   * Get optimized image URL with transformations and no watermark.
+   * This preserves legacy callers that only need quality/resize delivery.
+   */
+  getOptimizedUrl(publicId: string, transformation?: ImageUrlOptions): string {
+    return this.buildImageUrl(publicId, false, transformation);
   }
 
   /**
@@ -305,6 +340,75 @@ export class CloudinaryService {
       console.error('Error deleting video from Cloudinary:', error);
       throw new Error(`Failed to delete video: ${error.message}`);
     }
+  }
+
+  private buildBaseImageTransformation(
+    options: ImageUrlOptions
+  ): Record<string, string | number | boolean> {
+    const transformation: Record<string, string | number | boolean> = {
+      quality: options.quality ?? 'auto',
+    };
+
+    if (options.width !== undefined) transformation.width = options.width;
+    if (options.height !== undefined) transformation.height = options.height;
+    if (options.crop) transformation.crop = options.crop;
+
+    if (options.format) {
+      transformation.format = options.format;
+    } else {
+      transformation.fetch_format = 'auto';
+    }
+
+    return transformation;
+  }
+
+  private buildModelWatermarkTransformation(
+    options: BuildImageUrlOptions
+  ): Array<Record<string, string | number | boolean>> {
+    const watermarkPublicId = config.cloudinary.modelImageWatermark.publicId?.trim();
+    if (!watermarkPublicId) return [];
+
+    const relativeWidth = this.clampNumber(
+      options.watermarkRelativeWidth ?? config.cloudinary.modelImageWatermark.relativeWidth,
+      0.05,
+      1
+    );
+    const opacity = this.clampNumber(
+      options.watermarkOpacity ?? config.cloudinary.modelImageWatermark.opacity,
+      0,
+      100
+    );
+    const offsetX = Math.max(
+      0,
+      Math.round(options.watermarkOffsetX ?? config.cloudinary.modelImageWatermark.offsetX)
+    );
+    const offsetY = Math.max(
+      0,
+      Math.round(options.watermarkOffsetY ?? config.cloudinary.modelImageWatermark.offsetY)
+    );
+
+    // Cloudinary overlays with foldered public IDs use ":" in the delivery transformation layer.
+    const overlayLayer = watermarkPublicId.replace(/\//g, ':');
+
+    return [
+      {
+        overlay: overlayLayer,
+        flags: 'relative',
+        width: relativeWidth,
+        crop: 'scale',
+        opacity,
+      },
+      {
+        flags: 'layer_apply',
+        gravity: 'south_east',
+        x: offsetX,
+        y: offsetY,
+      },
+    ];
+  }
+
+  private clampNumber(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
   }
 }
 
