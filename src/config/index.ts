@@ -65,6 +65,28 @@ export const config = {
     fromName: process.env.EMAIL_FROM_NAME || 'Lusty',
     frontendUrl: FRONTEND_URL,
   },
+  twilio: {
+    accountSid: process.env.TWILIO_ACCOUNT_SID || '',
+    authToken: process.env.TWILIO_AUTH_TOKEN || '',
+    verifyServiceSid: process.env.TWILIO_VERIFY_SERVICE_SID || '',
+    verifyBaseUrl: process.env.TWILIO_VERIFY_BASE_URL || 'https://verify.twilio.com/v2',
+    verificationCodeLength: Math.max(
+      4,
+      Math.round(parseNumberEnv(process.env.TWILIO_VERIFY_CODE_LENGTH, 6))
+    ),
+    codeExpiresInSeconds: Math.max(
+      60,
+      Math.round(parseNumberEnv(process.env.TWILIO_VERIFY_CODE_EXPIRES_IN_SECONDS, 10 * 60))
+    ),
+    resendCooldownSeconds: Math.max(
+      0,
+      Math.round(parseNumberEnv(process.env.TWILIO_VERIFY_RESEND_COOLDOWN_SECONDS, 60))
+    ),
+    maxCheckAttempts: Math.max(
+      1,
+      Math.round(parseNumberEnv(process.env.TWILIO_VERIFY_MAX_ATTEMPTS, 5))
+    ),
+  },
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME || '',
     apiKey: process.env.CLOUDINARY_API_KEY || '',

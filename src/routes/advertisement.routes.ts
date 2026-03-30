@@ -2,7 +2,9 @@ import { Router } from 'express';
 import { AdvertisementController } from '../controllers/advertisement.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
 import {
+  checkPhoneVerificationCodeValidation,
   createAdvertisementValidation,
+  sendPhoneVerificationCodeValidation,
   submitServiceSuggestionValidation,
   updateAdvertisementValidation,
 } from '../middleware/validation.middleware';
@@ -73,6 +75,20 @@ router.delete('/:id', authMiddleware, controller.delete.bind(controller));
  * @access  Private
  */
 router.post('/:id/verify', authMiddleware, controller.verify.bind(controller));
+
+router.post(
+  '/:id/phone-verification/send',
+  authMiddleware,
+  sendPhoneVerificationCodeValidation,
+  controller.sendPhoneVerificationCode.bind(controller)
+);
+
+router.post(
+  '/:id/phone-verification/check',
+  authMiddleware,
+  checkPhoneVerificationCodeValidation,
+  controller.checkPhoneVerificationCode.bind(controller)
+);
 
 /**
  * @route   POST /api/advertisements/:id/promote

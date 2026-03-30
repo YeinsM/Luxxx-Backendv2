@@ -21,8 +21,12 @@ import {
   AdvertisementPromotion,
   UpsertAdvertisementPromotionDto,
 } from '../models/advertisement.model';
-import { InternalServerError, NotFoundError } from '../models/error.model';
+import { BadRequestError, InternalServerError, NotFoundError } from '../models/error.model';
 import { normalizeAdvertisementGender } from '../utils/gender.utils';
+import {
+  arePhoneNumbersEquivalent,
+  normalizePhoneNumber,
+} from '../utils/phone.utils';
 import { sseService } from '../utils/sse';
 import { getCloudinaryService } from './cloudinary.service';
 
@@ -69,6 +73,9 @@ export class AppDatabaseService {
 
     // Set status to 'active' by default, visibility is controlled by isOnline
     const row = this.serializeAd({ ...adData, userId, status: 'active' } as any);
+    if ((adData as any).phone) {
+      row.phone = normalizePhoneNumber((adData as any).phone);
+    }
     if ((adData as any).selectedPlan !== undefined) {
       row.plan_priority = await this.resolvePlanPriorityForSelectedPlan((adData as any).selectedPlan);
     }
@@ -166,6 +173,9 @@ export class AppDatabaseService {
   }
 
   async updateAdvertisement(id: string, userId: string, dto: Partial<CreateAdvertisementDto>): Promise<Advertisement> {
+    const existingRow = await this.getOwnedAdvertisementRow(id, userId);
+    if (!existingRow) throw new NotFoundError('Advertisement not found');
+
     const photoVerificationRequired = await this.isPhotoVerificationRequiredForNewUploads();
     const sanitizedDto = await this.sanitizeAdvertisementPhotoSelection(
       userId,
@@ -174,6 +184,20 @@ export class AppDatabaseService {
     );
     const { services, rates, ...adData } = sanitizedDto;
     const row = this.serializeAd(adData as any);
+    const phoneProvided = typeof (adData as any).phone === 'string' && (adData as any).phone.trim() !== '';
+    const phoneChanged =
+      phoneProvided &&
+      !arePhoneNumbersEquivalent(existingRow.phone, (adData as any).phone);
+
+    if (phoneProvided) {
+      row.phone = normalizePhoneNumber((adData as any).phone);
+    }
+
+    if (phoneChanged) {
+      row.phone_verified = false;
+      row.is_online = false;
+    }
+
     if ((adData as any).selectedPlan !== undefined) {
       row.plan_priority = await this.resolvePlanPriorityForSelectedPlan((adData as any).selectedPlan);
     }
@@ -258,12 +282,77 @@ export class AppDatabaseService {
   }
 
   async verifyAdvertisement(id: string, userId: string, idType: string, idNumber: string): Promise<Advertisement> {
+    const existingRow = await this.getOwnedAdvertisementRow(id, userId);
+    if (!existingRow) throw new NotFoundError('Advertisement not found');
+    if (!existingRow.phone || !existingRow.phone_verified) {
+      throw new BadRequestError(
+        'Debes verificar tu número de teléfono antes de enviar tu solicitud de verificación.',
+      );
+    }
+
     const { data, error } = await this.client
       .from('advertisements')
       .update({
         id_type: idType,
         id_number: idNumber,
         verification_status: 'SUBMITTED',
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error || !data) throw new NotFoundError('Advertisement not found');
+    return this.deserializeAd(data);
+  }
+
+  async upsertAdvertisementPhoneVerificationTarget(
+    id: string,
+    userId: string,
+    phone: string,
+  ): Promise<Advertisement> {
+    const existingRow = await this.getOwnedAdvertisementRow(id, userId);
+    if (!existingRow) throw new NotFoundError('Advertisement not found');
+
+    const normalizedPhone = normalizePhoneNumber(phone);
+    const phoneChanged = !arePhoneNumbersEquivalent(existingRow.phone, normalizedPhone);
+
+    const { data, error } = await this.client
+      .from('advertisements')
+      .update({
+        phone: normalizedPhone,
+        phone_verified: phoneChanged ? false : existingRow.phone_verified ?? false,
+        is_online: phoneChanged ? false : existingRow.is_online,
+      })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error || !data) throw new NotFoundError('Advertisement not found');
+    return this.deserializeAd(data);
+  }
+
+  async markAdvertisementPhoneVerified(
+    id: string,
+    userId: string,
+    phone: string,
+  ): Promise<Advertisement> {
+    const existingRow = await this.getOwnedAdvertisementRow(id, userId);
+    if (!existingRow) throw new NotFoundError('Advertisement not found');
+
+    const normalizedPhone = normalizePhoneNumber(phone);
+    if (!arePhoneNumbersEquivalent(existingRow.phone, normalizedPhone)) {
+      throw new BadRequestError(
+        'El número de teléfono cambió después de solicitar el código. Solicita un nuevo SMS.',
+      );
+    }
+
+    const { data, error } = await this.client
+      .from('advertisements')
+      .update({
+        phone: normalizedPhone,
+        phone_verified: true,
       })
       .eq('id', id)
       .eq('user_id', userId)
@@ -1792,6 +1881,18 @@ export class AppDatabaseService {
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
     };
+  }
+
+  private async getOwnedAdvertisementRow(id: string, userId: string): Promise<any | null> {
+    const { data, error } = await this.client
+      .from('advertisements')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+    return data;
   }
 
   private deserializeMedia(data: any): UserMedia {

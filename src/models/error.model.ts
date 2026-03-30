@@ -40,6 +40,12 @@ export class ConflictError extends ApiError {
   }
 }
 
+export class TooManyRequestsError extends ApiError {
+  constructor(message: string = 'Too Many Requests') {
+    super(429, message);
+  }
+}
+
 export class InternalServerError extends ApiError {
   constructor(message: string = 'Internal Server Error') {
     super(500, message);

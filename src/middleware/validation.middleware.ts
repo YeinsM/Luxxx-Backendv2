@@ -1,5 +1,6 @@
 import { body } from 'express-validator';
 import { normalizeAdvertisementGender } from '../utils/gender.utils';
+import { normalizePhoneNumber } from '../utils/phone.utils';
 
 const ESCORT_SERVICE_NAMES = new Set(['escortInbound', 'escort']);
 const EXCLUSIVE_SERVICE_NAMES = new Set(['eroticMassage', 'bdsm', 'virtualSex', 'redLights']);
@@ -284,6 +285,32 @@ export const updateAdvertisementValidation = [
 ];
 
 // updateAdvertisementValidation shares all optional fields above — defined inline
+
+export const sendPhoneVerificationCodeValidation = [
+  body('phone')
+    .trim()
+    .notEmpty()
+    .withMessage('Phone is required')
+    .custom((value: string) => {
+      normalizePhoneNumber(value);
+      return true;
+    }),
+];
+
+export const checkPhoneVerificationCodeValidation = [
+  body('phone')
+    .trim()
+    .notEmpty()
+    .withMessage('Phone is required')
+    .custom((value: string) => {
+      normalizePhoneNumber(value);
+      return true;
+    }),
+  body('code')
+    .trim()
+    .matches(/^\d{6}$/)
+    .withMessage('Verification code must be 6 digits'),
+];
 
 export const createReviewValidation = [
   body('advertisementId').notEmpty().withMessage('Advertisement ID is required'),

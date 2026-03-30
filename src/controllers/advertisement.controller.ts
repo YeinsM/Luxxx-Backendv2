@@ -2,10 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
 import { getAppDatabaseService } from '../services/app-database.service';
 import { getEmailService } from '../services/email.service';
+import { getPhoneVerificationService } from '../services/phone-verification.service';
 import { ApiResponse } from '../models/user.model';
 import { BadRequestError, InternalServerError, NotFoundError } from '../models/error.model';
+import { arePhoneNumbersEquivalent, normalizePhoneNumber } from '../utils/phone.utils';
 
 const db = getAppDatabaseService();
+const phoneVerificationService = getPhoneVerificationService();
 
 interface AuthRequest extends Request {
   user?: { userId: string; email: string; userType: string };
@@ -137,8 +140,20 @@ export class AdvertisementController {
       if (!userId) throw new BadRequestError('User ID not found');
 
       // Guard: only allow isOnline=true if the advertisement itself is VERIFIED
+      // and the phone tied to the public ad is still verified.
       const existingAd = await db.getAdvertisementById(req.params.id);
-      if (!existingAd || existingAd.verificationStatus !== 'VERIFIED') {
+      const phoneChanged =
+        !!existingAd &&
+        typeof req.body.phone === 'string' &&
+        req.body.phone.trim() !== '' &&
+        !arePhoneNumbersEquivalent(existingAd.phone, req.body.phone);
+
+      if (
+        !existingAd ||
+        existingAd.verificationStatus !== 'VERIFIED' ||
+        !existingAd.phoneVerified ||
+        phoneChanged
+      ) {
         req.body = { ...req.body, isOnline: false };
       }
 
@@ -194,6 +209,75 @@ export class AdvertisementController {
   }
 
   /** POST /api/advertisements/:id/promote — Create promotion campaign */
+  /** POST /api/advertisements/:id/phone-verification/send — Send SMS verification code */
+  async sendPhoneVerificationCode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) throw new BadRequestError(errors.array()[0].msg);
+
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const normalizedPhone = normalizePhoneNumber(req.body.phone);
+      const ad = await db.upsertAdvertisementPhoneVerificationTarget(
+        req.params.id,
+        userId,
+        normalizedPhone,
+      );
+      const verification = await phoneVerificationService.sendVerificationCode(
+        req.params.id,
+        normalizedPhone,
+      );
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'SMS verification code sent successfully',
+        data: {
+          advertisement: ad,
+          phone: verification.normalizedPhone,
+          cooldownSeconds: verification.cooldownSeconds,
+          expiresInSeconds: verification.expiresInSeconds,
+        },
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/advertisements/:id/phone-verification/check — Validate SMS verification code */
+  async checkPhoneVerificationCode(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) throw new BadRequestError(errors.array()[0].msg);
+
+      const userId = (req as AuthRequest).user?.userId;
+      if (!userId) throw new BadRequestError('User ID not found');
+
+      const normalizedPhone = normalizePhoneNumber(req.body.phone);
+      await phoneVerificationService.checkVerificationCode(
+        req.params.id,
+        normalizedPhone,
+        req.body.code,
+      );
+      const ad = await db.markAdvertisementPhoneVerified(
+        req.params.id,
+        userId,
+        normalizedPhone,
+      );
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Phone verified successfully',
+        data: ad,
+      };
+      res.status(200).json(response);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/advertisements/:id/promote â€” Create promotion campaign */
   async promote(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = (req as AuthRequest).user?.userId;
