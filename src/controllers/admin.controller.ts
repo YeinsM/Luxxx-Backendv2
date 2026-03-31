@@ -53,6 +53,10 @@ const LAUNCH_SETTING_KEYS = {
   launchCreditsEmailEnabled: "launch_credits_email_enabled",
 } as const;
 
+const ADVERTISEMENT_SETTING_KEYS = {
+  advertisementPromoStickerEnabled: "advertisement_promo_sticker_enabled",
+} as const;
+
 function parseBooleanAdminSetting(
   value: string | undefined,
   defaultValue: boolean,
@@ -686,6 +690,11 @@ export async function getAdminSettings(
           settings[LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled],
           true,
         ),
+        // Advertisement feature settings
+        advertisementPromoStickerEnabled: parseBooleanAdminSetting(
+          settings[ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled],
+          true,
+        ),
       },
     });
   } catch (err) {
@@ -740,6 +749,8 @@ export async function updateAdminSettings(
       dashboardMenuBalanceEnabled,
       // Launch settings
       launchCreditsEmailEnabled,
+      // Advertisement feature settings
+      advertisementPromoStickerEnabled,
     } = req.body;
 
     const supabase = (getDatabaseService() as any).client;
@@ -921,6 +932,14 @@ export async function updateAdminSettings(
         updated_at: now,
       });
     }
+    // Advertisement feature settings
+    if (advertisementPromoStickerEnabled !== undefined) {
+      upserts.push({
+        key: ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled,
+        value: String(parseBooleanAdminInput(advertisementPromoStickerEnabled, "advertisementPromoStickerEnabled")),
+        updated_at: now,
+      });
+    }
 
     if (upserts.length > 0) {
       const { error } = await supabase.from("admin_settings").upsert(upserts);
@@ -1031,6 +1050,7 @@ export async function getBranding(
         PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled,
         ...Object.values(DASHBOARD_MENU_SETTING_KEYS),
         LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled,
+        ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled,
       ]);
 
     if (error) throw error;
@@ -1145,6 +1165,11 @@ export async function getBranding(
         // Launch settings
         launchCreditsEmailEnabled: parseBooleanAdminSetting(
           settings[LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled],
+          true,
+        ),
+        // Advertisement feature settings
+        advertisementPromoStickerEnabled: parseBooleanAdminSetting(
+          settings[ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled],
           true,
         ),
       },
