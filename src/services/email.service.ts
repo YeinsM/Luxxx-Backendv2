@@ -1480,6 +1480,74 @@ ${branding.appName}
       return false;
     }
   }
+
+  /**
+   * Send a contact form submission to the admin email
+   */
+  async sendContactFormEmail(
+    senderEmail: string,
+    topic: string,
+    message: string,
+  ): Promise<boolean> {
+    if (!this.resend) {
+      console.log('❌ Contact email not sent - Resend not configured');
+      return false;
+    }
+
+    try {
+      const branding = await this.getEmailBranding();
+      const safeSender = this.escapeHtml(senderEmail);
+      const safeTopic = this.escapeHtml(topic);
+      const safeMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
+
+      const html = `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
+          <h2 style="color:#1e293b;">New Contact Form Submission</h2>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+            <tr>
+              <td style="padding:8px 12px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;width:120px;">From</td>
+              <td style="padding:8px 12px;border:1px solid #e2e8f0;">${safeSender}</td>
+            </tr>
+            <tr>
+              <td style="padding:8px 12px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Topic</td>
+              <td style="padding:8px 12px;border:1px solid #e2e8f0;">${safeTopic}</td>
+            </tr>
+          </table>
+          <div style="padding:16px;border:1px solid #e2e8f0;border-radius:8px;background:#fafafa;margin-top:12px;">
+            <p style="margin:0 0 8px 0;font-weight:600;color:#1e293b;">Message:</p>
+            <p style="margin:0;color:#334155;line-height:1.6;">${safeMessage}</p>
+          </div>
+          <p style="margin-top:20px;font-size:12px;color:#94a3b8;">
+            ${this.escapeHtml(branding.appName)} — Contact Form
+          </p>
+        </div>
+      `;
+
+      const text = `New Contact Form\nFrom: ${senderEmail}\nTopic: ${topic}\n\nMessage:\n${message}`;
+
+      console.log(`📧 Sending contact form email from ${senderEmail}...`);
+
+      const { data, error } = await this.resend.emails.send({
+        from: this.getFromAddress(branding),
+        to: [config.email.fromEmail],
+        replyTo: senderEmail,
+        subject: `[Contact] ${topic}`,
+        html,
+        text,
+      });
+
+      if (error) {
+        console.error('❌ Failed to send contact form email:', error);
+        return false;
+      }
+
+      console.log(`✅ Contact form email sent (ID: ${data?.id})`);
+      return true;
+    } catch (error: any) {
+      console.error('❌ Failed to send contact form email:', error.message);
+      return false;
+    }
+  }
 }
 
 // Singleton instance
