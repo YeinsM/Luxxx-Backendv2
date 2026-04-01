@@ -76,6 +76,27 @@ export class SupabaseDatabaseService implements DatabaseService {
     return this.deserializeUser(data);
   }
 
+  async getAdminUsers(): Promise<User[]> {
+    const { data, error } = await this.client
+      .from('users')
+      .select('*')
+      .eq('role', 'ADMIN')
+      .eq('is_active', true)
+      .is('soft_deleted_at', null)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Supabase getAdminUsers error:', error);
+      return [];
+    }
+
+    if (!data) {
+      return [];
+    }
+
+    return data.map((row) => this.deserializeUser(row));
+  }
+
   async getUserByVerificationToken(token: string): Promise<User | null> {
     const { data, error } = await this.client
       .from('users')

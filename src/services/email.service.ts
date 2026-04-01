@@ -141,6 +141,41 @@ export class EmailService {
     return `© ${new Date().getFullYear()} ${this.escapeHtml(branding.appName)}. ${emailT(lang, 'copyrightSuffix')}`;
   }
 
+  private getRegistrationDisplayName(user: User): string {
+    if ('name' in user && user.name) {
+      return user.name;
+    }
+
+    if ('username' in user && user.username) {
+      return user.username;
+    }
+
+    if ('agencyName' in user && user.agencyName) {
+      return user.agencyName;
+    }
+
+    if ('clubName' in user && user.clubName) {
+      return user.clubName;
+    }
+
+    return user.email;
+  }
+
+  private getRegistrationUserTypeLabel(userType: UserType): string {
+    switch (userType) {
+      case UserType.ESCORT:
+        return 'Escort';
+      case UserType.MEMBER:
+        return 'Miembro';
+      case UserType.AGENCY:
+        return 'Agencia';
+      case UserType.CLUB:
+        return 'Club';
+      default:
+        return 'Usuario';
+    }
+  }
+
   private renderEmailFooter(
     branding: EmailBranding,
     lang: EmailLang = 'es',
@@ -1018,6 +1053,101 @@ ${emailT(lang, 'autoEmailFooter')}
       return true;
     } catch (err) {
       console.error('❌ Admin invitation email error:', err);
+      return false;
+    }
+  }
+
+  async sendNewUserRegistrationAlert(adminEmail: string, newUser: User): Promise<boolean> {
+    if (!this.resend) {
+      console.warn('⚠️  New user alert not sent — Resend not configured');
+      return false;
+    }
+
+    try {
+      const branding = await this.getEmailBranding();
+      const safeAdminEmail = this.escapeHtml(adminEmail);
+      const safeUserName = this.escapeHtml(this.getRegistrationDisplayName(newUser));
+      const safeUserEmail = this.escapeHtml(newUser.email);
+      const safeUserType = this.escapeHtml(this.getRegistrationUserTypeLabel(newUser.userType));
+      const safeTimestamp = this.escapeHtml(
+        new Intl.DateTimeFormat('es-ES', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(newUser.createdAt)
+      );
+      const safeCity = this.escapeHtml('city' in newUser ? newUser.city : 'No especificada');
+
+      const headerHtml = `
+        <p style="color: #dbeafe; font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin: 0 0 8px 0;">Notificación administrativa</p>
+        <h1 style="color: #eff6ff; margin: 0; font-size: 22px; font-weight: 800;">Nuevo usuario registrado</h1>
+        <p style="color: #bfdbfe; font-size: 13px; margin: 8px 0 0 0;">${this.escapeHtml(branding.appName)} · Aviso para administradores</p>
+      `;
+
+      const bodyHtml = `
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">
+          Se registró un nuevo usuario en la plataforma. Este aviso fue enviado a <strong style="color: ${this.emailTheme.textPrimary};">${safeAdminEmail}</strong>.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #4b5563; border-radius: 8px; overflow: hidden;">
+          <tr style="background: ${this.emailTheme.panelBg};">
+            <td style="padding: 10px 16px; color: #93c5fd; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; width: 38%;">Campo</td>
+            <td style="padding: 10px 16px; color: #93c5fd; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Valor</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Nombre</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px; font-weight: 700;">${safeUserName}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Email</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeUserEmail}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Tipo de cuenta</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeUserType}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Ciudad</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeCity}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Fecha de registro</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeTimestamp}</td>
+          </tr>
+        </table>
+
+        <p style="color: ${this.emailTheme.textMuted}; font-size: 13px; margin: 24px 0 0 0; line-height: 1.6;">
+          Este correo es informativo y se envía automáticamente cada vez que se registra un usuario nuevo.
+        </p>
+      `;
+
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        title: 'Nuevo usuario registrado',
+        width: 560,
+        headerHtml,
+        bodyHtml,
+        headerPadding: '28px 36px',
+        bodyPadding: '32px 36px',
+        headerBackground: 'linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%)',
+        footerHtml: this.renderEmailFooter(branding, 'es', 'Notificación automática para administradores'),
+      });
+
+      const { data, error } = await this.resend.emails.send({
+        from: this.getFromAddress(branding),
+        to: [adminEmail],
+        subject: `🔔 Nuevo usuario registrado - ${branding.appName}`,
+        html,
+      });
+
+      if (error) {
+        console.error('❌ New user alert email failed:', error);
+        return false;
+      }
+
+      console.log(`✅ New user alert sent to ${adminEmail} (ID: ${data?.id})`);
+      return true;
+    } catch (err) {
+      console.error('❌ New user alert email error:', err);
       return false;
     }
   }

@@ -80,6 +80,10 @@ export class AuthService {
       console.error('Failed to send verification email:', error);
     });
 
+    this.notifyAdminsAboutNewRegistration(createdUser).catch((error) => {
+      console.error('Failed to notify admins about new registration:', error);
+    });
+
     // Launch credits: add 100 credits + send email if enabled (non-blocking)
     this.grantLaunchCreditsIfEnabled(createdUser).catch((error) => {
       console.error('Failed to grant launch credits:', error);
@@ -127,6 +131,10 @@ export class AuthService {
     this.emailService.sendVerificationEmail(createdUser, verificationToken).catch((error) => {
       console.error('Failed to send verification email:', error);
     });
+
+    this.notifyAdminsAboutNewRegistration(createdUser).catch((error) => {
+      console.error('Failed to notify admins about new registration:', error);
+    });
     
     return {
       success: true,
@@ -171,6 +179,10 @@ export class AuthService {
     // Send verification email (non-blocking)
     this.emailService.sendVerificationEmail(createdUser, verificationToken).catch((error) => {
       console.error('Failed to send verification email:', error);
+    });
+
+    this.notifyAdminsAboutNewRegistration(createdUser).catch((error) => {
+      console.error('Failed to notify admins about new registration:', error);
     });
     
     return {
@@ -218,6 +230,10 @@ export class AuthService {
     // Send verification email (non-blocking)
     this.emailService.sendVerificationEmail(createdUser, verificationToken).catch((error) => {
       console.error('Failed to send verification email:', error);
+    });
+
+    this.notifyAdminsAboutNewRegistration(createdUser).catch((error) => {
+      console.error('Failed to notify admins about new registration:', error);
     });
     
     return {
@@ -690,6 +706,38 @@ export class AuthService {
 
   private hashResetToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async notifyAdminsAboutNewRegistration(user: User): Promise<void> {
+    const admins = await this.db.getAdminUsers();
+    const recipientEmails = Array.from(
+      new Map(
+        admins
+          .filter((admin) => admin.email && admin.email.toLowerCase() !== user.email.toLowerCase())
+          .map((admin) => [admin.email.toLowerCase(), admin.email])
+      ).values()
+    );
+
+    if (recipientEmails.length === 0) {
+      console.warn(`⚠️  No active admins found to notify about new registration: ${user.email}`);
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      recipientEmails.map((adminEmail) =>
+        this.emailService.sendNewUserRegistrationAlert(adminEmail, user)
+      )
+    );
+
+    const failedCount = results.filter(
+      (result) => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value)
+    ).length;
+
+    if (failedCount > 0) {
+      console.warn(
+        `⚠️  Failed to send ${failedCount} admin registration alert(s) for ${user.email}`
+      );
+    }
   }
 
   private async grantLaunchCreditsIfEnabled(user: User): Promise<void> {

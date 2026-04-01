@@ -76,6 +76,19 @@ export class PostgresDatabaseService implements DatabaseService {
     return result.rows.length > 0 ? this.deserializeUser(result.rows[0]) : null;
   }
 
+  async getAdminUsers(): Promise<User[]> {
+    const query = `
+      SELECT *
+      FROM users
+      WHERE role = $1
+        AND is_active = TRUE
+        AND soft_deleted_at IS NULL
+      ORDER BY created_at ASC
+    `;
+    const result = await this.pool.query(query, ['ADMIN']);
+    return result.rows.map((row) => this.deserializeUser(row));
+  }
+
   async getUserByVerificationToken(token: string): Promise<User | null> {
     const query = 'SELECT * FROM users WHERE email_verification_token = $1';
     const result = await this.pool.query(query, [token]);

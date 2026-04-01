@@ -30,6 +30,12 @@ export class MemoryDatabaseService implements DatabaseService {
     return this.users.get(id) || null;
   }
 
+  async getAdminUsers(): Promise<User[]> {
+    return Array.from(this.users.values()).filter(
+      (user) => user.role === 'ADMIN' && user.isActive && !user.softDeletedAt
+    );
+  }
+
   async getUserByVerificationToken(token: string): Promise<User | null> {
     const users = Array.from(this.users.values());
     const user = users.find((u) => u.emailVerificationToken === token);
