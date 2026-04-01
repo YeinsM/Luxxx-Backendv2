@@ -248,6 +248,20 @@ const advertisementOptionalFields = [
     .optional()
     .isIn(['DAY', 'WEEK', 'MONTH'])
     .withMessage('Duration must be DAY, WEEK or MONTH'),
+  body('telegramUsername')
+    .optional()
+    .trim()
+    .custom((value: string | undefined) => {
+      if (!value) return true;
+      if (!/^@?[A-Za-z0-9_]{5,32}$/.test(value)) {
+        throw new Error('Telegram username must be 5 to 32 characters and contain only letters, numbers or underscores');
+      }
+      return true;
+    }),
+  body('reviewsVisible')
+    .optional()
+    .isBoolean()
+    .withMessage('Reviews visibility must be boolean'),
   body('services')
     .optional()
     .custom(validateExclusiveAdvertisementServices),

@@ -135,6 +135,8 @@ COMMENT ON COLUMN users.soft_deleted_at IS 'Soft delete timestamp; null means ac
 -- advertisements.plan_priority INTEGER NOT NULL DEFAULT 0
 -- advertisements.boosted_until TIMESTAMP WITH TIME ZONE
 -- advertisements.plan_expires_at TIMESTAMP WITH TIME ZONE
+-- advertisements.reviews_visible BOOLEAN NOT NULL DEFAULT TRUE
+-- advertisements.telegram_username VARCHAR(100)
 -- advertisements.last_seen_online_at TIMESTAMP WITH TIME ZONE
 -- advertisements.presence_expires_at TIMESTAMP WITH TIME ZONE
 -- If the selected plan has promotion_plans.expires_at, that cutoff overrides duration-based expiry.

@@ -51,6 +51,7 @@ const PHOTO_SETTING_KEYS = {
 
 const LAUNCH_SETTING_KEYS = {
   launchCreditsEmailEnabled: "launch_credits_email_enabled",
+  promotionDurationSelectorEnabled: "promotion_duration_selector_enabled",
 } as const;
 
 const ADVERTISEMENT_SETTING_KEYS = {
@@ -690,6 +691,10 @@ export async function getAdminSettings(
           settings[LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled],
           true,
         ),
+        promotionDurationSelectorEnabled: parseBooleanAdminSetting(
+          settings[LAUNCH_SETTING_KEYS.promotionDurationSelectorEnabled],
+          true,
+        ),
         // Advertisement feature settings
         advertisementPromoStickerEnabled: parseBooleanAdminSetting(
           settings[ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled],
@@ -749,6 +754,7 @@ export async function updateAdminSettings(
       dashboardMenuBalanceEnabled,
       // Launch settings
       launchCreditsEmailEnabled,
+      promotionDurationSelectorEnabled,
       // Advertisement feature settings
       advertisementPromoStickerEnabled,
     } = req.body;
@@ -932,6 +938,13 @@ export async function updateAdminSettings(
         updated_at: now,
       });
     }
+    if (promotionDurationSelectorEnabled !== undefined) {
+      upserts.push({
+        key: LAUNCH_SETTING_KEYS.promotionDurationSelectorEnabled,
+        value: String(parseBooleanAdminInput(promotionDurationSelectorEnabled, "promotionDurationSelectorEnabled")),
+        updated_at: now,
+      });
+    }
     // Advertisement feature settings
     if (advertisementPromoStickerEnabled !== undefined) {
       upserts.push({
@@ -1050,6 +1063,7 @@ export async function getBranding(
         PUBLIC_MENU_SETTING_KEYS.videosMenuEnabled,
         ...Object.values(DASHBOARD_MENU_SETTING_KEYS),
         LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled,
+        LAUNCH_SETTING_KEYS.promotionDurationSelectorEnabled,
         ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled,
       ]);
 
@@ -1165,6 +1179,10 @@ export async function getBranding(
         // Launch settings
         launchCreditsEmailEnabled: parseBooleanAdminSetting(
           settings[LAUNCH_SETTING_KEYS.launchCreditsEmailEnabled],
+          true,
+        ),
+        promotionDurationSelectorEnabled: parseBooleanAdminSetting(
+          settings[LAUNCH_SETTING_KEYS.promotionDurationSelectorEnabled],
           true,
         ),
         // Advertisement feature settings

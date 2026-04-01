@@ -9,7 +9,7 @@ const db = getAppDatabaseService();
 const userDb = getDatabaseService();
 
 interface AuthRequest extends Request {
-  user?: { userId: string; email: string; userType: string };
+  user?: { userId: string; email: string; userType: string; role?: string };
 }
 
 export class ReviewController {
@@ -50,7 +50,7 @@ export class ReviewController {
   /** GET /api/reviews/advertisement/:id — Get reviews for a specific advertisement */
   async getByAdvertisement(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const reviews = await db.getReviewsByAdvertisement(req.params.id);
+      const reviews = await db.getPublicReviewsByAdvertisement(req.params.id);
       const response: ApiResponse = {
         success: true,
         data: reviews,

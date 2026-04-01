@@ -67,6 +67,7 @@ export interface Advertisement {
   contactByWhatsApp?: boolean;
   contactBySignal?: boolean;
   contactByTelegram?: boolean;
+  telegramUsername?: string;
   contactBySMS?: boolean;
   contactByKinky?: boolean;
   kinkyEmailFrequency?: string;
@@ -98,6 +99,7 @@ export interface Advertisement {
   selectedDuration?: string;   // DAY | WEEK | MONTH
   selectedAddons?: string[];   // e.g. ['promo_sticker', 'emoji_title']
   planExpiresAt?: Date;
+  reviewsVisible: boolean;
   
   // Stats
   viewCount: number;
@@ -123,6 +125,7 @@ export interface Advertisement {
   rates?: AdvertisementRate[];
   photos?: UserMedia[];
   videos?: UserMedia[];
+  reviews?: Review[];
 }
 
 export interface AdvertisementService {
@@ -323,6 +326,7 @@ export interface CreateAdvertisementDto {
   contactByWhatsApp?: boolean;
   contactBySignal?: boolean;
   contactByTelegram?: boolean;
+  telegramUsername?: string;
   contactBySMS?: boolean;
   contactByKinky?: boolean;
   kinkyEmailFrequency?: string;
@@ -342,6 +346,7 @@ export interface CreateAdvertisementDto {
   selectedPlan?: string;      // STANDARD | LAUNCH | PREMIUM | EXCLUSIVE
   selectedDuration?: string;  // DAY | WEEK | MONTH
   selectedAddons?: string[];  // e.g. ['promo_sticker', 'emoji_title']
+  reviewsVisible?: boolean;
   planExpiresAt?: Date;
   // Emoji title feature
   titleEmoji?: string;
@@ -436,7 +441,7 @@ export interface ProfileSearchParams {
   city?: string;
   query?: string;
   gender?: string;
-  sortBy?: 'rating' | 'price' | 'newest' | 'distance';
+  sortBy?: 'rating' | 'price' | 'newest' | 'distance' | 'trending' | 'available_now';
   minPrice?: number;
   maxPrice?: number;
   page?: number;

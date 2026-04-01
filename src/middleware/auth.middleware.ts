@@ -96,7 +96,7 @@ export const optionalAuthMiddleware = async (
  */
 export const requireMember = (req: Request, res: Response, next: NextFunction): void => {
   const user = (req as any).user;
-  if (!user || user.userType !== 'member') {
+  if (!user || user.userType !== 'member' || user.role === 'ADMIN') {
     return next(new ForbiddenError('Solo los clientes pueden realizar esta acción'));
   }
   next();

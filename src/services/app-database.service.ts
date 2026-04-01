@@ -15,6 +15,7 @@ import {
   SavedSearch,
   PhotoVerification,
   CreateAdvertisementDto,
+  PlanName,
   ProfileSearchParams,
   PromotionPlan,
   PromotionPlanAvailabilityStatus,
@@ -46,6 +47,12 @@ const PHOTO_VERIFICATION_REQUIRED_SETTING_KEY = 'photo_verification_required';
 const cloudinaryService = getCloudinaryService();
 type PhotoVerificationStatus = PhotoVerification['status'];
 
+function normalizeTelegramUsername(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().replace(/^@+/, '');
+  return normalized || null;
+}
+
 export class AppDatabaseService {
   private client: SupabaseClient;
 
@@ -70,6 +77,10 @@ export class AppDatabaseService {
       photoVerificationRequired,
     );
     const { services, rates, ...adData } = sanitizedDto;
+
+    if (typeof (adData as any).selectedPlan !== 'string' || !(adData as any).selectedPlan.trim()) {
+      (adData as any).selectedPlan = await this.resolveDefaultAdvertisementPlanName();
+    }
 
     // Set status to 'active' by default, visibility is controlled by isOnline
     const row = this.serializeAd({ ...adData, userId, status: 'active' } as any);
@@ -149,6 +160,7 @@ export class AppDatabaseService {
       ad.photos || [],
       photoVerificationRequired,
     );
+    ad.reviews = ad.reviewsVisible ? await this.getReviewsByAdvertisement(ad.id) : [];
     return ad;
   }
 
@@ -389,6 +401,7 @@ export class AppDatabaseService {
     const { category, city, query, gender, sortBy, page = 1, limit = 20 } = params;
     const offset = (page - 1) * limit;
     const normalizedGender = normalizeAdvertisementGender(gender);
+    const nowIso = new Date().toISOString();
 
     let q = this.client
       .from('advertisements')
@@ -408,14 +421,25 @@ export class AppDatabaseService {
       q = q.eq('gender', normalizedGender);
     }
 
-    // Sorting: plan tier (EXCLUSIVE→PREMIUM→STANDARD) is always the primary sort.
-    // Within each tier, boosted ads (boosted_until in the future) come first.
     switch (sortBy) {
       case 'rating':
         q = q
-          .order('plan_priority', { ascending: false })
-          .order('boosted_until', { ascending: false, nullsFirst: false })
-          .order('rating', { ascending: false });
+          .order('rating', { ascending: false })
+          .order('review_count', { ascending: false })
+          .order('created_at', { ascending: false });
+        break;
+      case 'trending':
+        q = q
+          .order('view_count', { ascending: false })
+          .order('rating', { ascending: false })
+          .order('created_at', { ascending: false });
+        break;
+      case 'available_now':
+        q = q
+          .gte('presence_expires_at', nowIso)
+          .order('last_seen_online_at', { ascending: false, nullsFirst: false })
+          .order('rating', { ascending: false })
+          .order('created_at', { ascending: false });
         break;
       case 'newest':
         q = q
@@ -919,6 +943,20 @@ export class AppDatabaseService {
     return (data || []).map(this.deserializeReview);
   }
 
+  async getPublicReviewsByAdvertisement(advertisementId: string): Promise<Review[]> {
+    const { data: advertisement, error } = await this.client
+      .from('advertisements')
+      .select('reviews_visible')
+      .eq('id', advertisementId)
+      .maybeSingle();
+
+    if (error || !advertisement || advertisement.reviews_visible === false) {
+      return [];
+    }
+
+    return this.getReviewsByAdvertisement(advertisementId);
+  }
+
   async getReviewsByUser(userId: string): Promise<Review[]> {
     // Get the user's advertisement first
     const { data: ads } = await this.client
@@ -951,6 +989,20 @@ export class AppDatabaseService {
   }
 
   async createReview(userId: string, authorName: string, advertisementId: string, rating: number, text?: string): Promise<Review> {
+    const { data: advertisement, error: advertisementError } = await this.client
+      .from('advertisements')
+      .select('id, user_id, name')
+      .eq('id', advertisementId)
+      .maybeSingle();
+
+    if (advertisementError || !advertisement) {
+      throw new NotFoundError('Advertisement not found');
+    }
+
+    if (advertisement.user_id === userId) {
+      throw new BadRequestError('You cannot review your own advertisement');
+    }
+
     const { data, error } = await this.client
       .from('reviews')
       .insert([{
@@ -963,10 +1015,34 @@ export class AppDatabaseService {
       .select()
       .single();
 
-    if (error) throw new InternalServerError(`Failed to create review: ${error.message}`);
+    if (error) {
+      const rawMessage = error.message || 'Unknown review error';
+      if (
+        error.code === '23505' ||
+        rawMessage.toLowerCase().includes('reviews_author_ad_unique')
+      ) {
+        throw new BadRequestError('You have already reviewed this profile');
+      }
+
+      throw new InternalServerError(`Failed to create review: ${rawMessage}`);
+    }
 
     // Update advertisement rating
     await this.updateAdRating(advertisementId);
+
+    if (advertisement.user_id) {
+      try {
+        await this.createNotification(
+          advertisement.user_id,
+          'review',
+          'Nueva reseña',
+          `${authorName} dejó una reseña de ${rating}/5`,
+          data.id,
+        );
+      } catch (notificationError) {
+        console.error('Failed to create review notification:', notificationError);
+      }
+    }
 
     return this.deserializeReview(data);
   }
@@ -1771,6 +1847,7 @@ export class AppDatabaseService {
     if (ad.contactByWhatsApp !== undefined) row.contact_by_whatsapp = ad.contactByWhatsApp;
     if (ad.contactBySignal !== undefined) row.contact_by_signal = ad.contactBySignal;
     if (ad.contactByTelegram !== undefined) row.contact_by_telegram = ad.contactByTelegram;
+    if ((ad as any).telegramUsername !== undefined) row.telegram_username = normalizeTelegramUsername((ad as any).telegramUsername);
     if (ad.contactBySMS !== undefined) row.contact_by_sms = ad.contactBySMS;
     if (ad.contactByKinky !== undefined) row.contact_by_kinky = ad.contactByKinky;
     if (ad.kinkyEmailFrequency !== undefined) row.kinky_email_frequency = ad.kinkyEmailFrequency;
@@ -1783,6 +1860,7 @@ export class AppDatabaseService {
     if ((ad as any).verificationPhotoBody !== undefined) row.verification_photo_body = (ad as any).verificationPhotoBody;
     if ((ad as any).verificationPhotoIdentity !== undefined) row.verification_photo_identity = (ad as any).verificationPhotoIdentity;
     if ((ad as any).titleEmoji !== undefined) row.title_emoji = (ad as any).titleEmoji;
+    if ((ad as any).reviewsVisible !== undefined) row.reviews_visible = (ad as any).reviewsVisible;
     if (ad.promotionType !== undefined) row.promotion_type = ad.promotionType;
     if (ad.targetAudience !== undefined) row.target_audience = ad.targetAudience;
     if (ad.campaignDuration !== undefined) row.campaign_duration = ad.campaignDuration;
@@ -1800,6 +1878,7 @@ export class AppDatabaseService {
   private deserializeAd(data: any): Advertisement {
     const normalizedGender = normalizeAdvertisementGender(data.gender);
     const currentlyOnline = this.isAdvertisementCurrentlyOnlineRow(data);
+    const reviewsVisible = data.reviews_visible ?? true;
 
     return {
       id: data.id,
@@ -1850,6 +1929,7 @@ export class AppDatabaseService {
       contactByWhatsApp: data.contact_by_whatsapp ?? true,
       contactBySignal: data.contact_by_signal ?? true,
       contactByTelegram: data.contact_by_telegram ?? true,
+      telegramUsername: data.telegram_username || undefined,
       contactBySMS: data.contact_by_sms ?? true,
       contactByKinky: data.contact_by_kinky ?? false,
       kinkyEmailFrequency: data.kinky_email_frequency || 'every',
@@ -1870,16 +1950,20 @@ export class AppDatabaseService {
       selectedPlan: data.selected_plan,
       selectedDuration: data.selected_duration,
       selectedAddons: data.selected_addons ?? [],
+      reviewsVisible,
       planExpiresAt: data.plan_expires_at ? new Date(data.plan_expires_at) : undefined,
       selectedPhotoIds: data.selected_photo_ids || [],
       selectedVideoIds: data.selected_video_ids || [],
       planPriority: data.plan_priority ?? 0,
       boostedUntil: data.boosted_until ? new Date(data.boosted_until) : undefined,
       viewCount: data.view_count || 0,
-      rating: parseFloat(data.rating) || 0,
-      reviewCount: data.review_count || 0,
+      rating: reviewsVisible ? parseFloat(data.rating) || 0 : 0,
+      reviewCount: reviewsVisible ? data.review_count || 0 : 0,
       createdAt: new Date(data.created_at),
       updatedAt: new Date(data.updated_at),
+      reviews: Array.isArray(data.reviews)
+        ? data.reviews.map((review: any) => this.deserializeReview(review))
+        : undefined,
     };
   }
 
@@ -2444,6 +2528,35 @@ export class AppDatabaseService {
     if (normalized === 'COMING_SOON') return 'COMING_SOON';
     if (normalized === 'HIDDEN') return 'HIDDEN';
     return 'AVAILABLE';
+  }
+
+  private async resolveDefaultAdvertisementPlanName(): Promise<PlanName> {
+    try {
+      const { data, error } = await this.client
+        .from('promotion_plans')
+        .select('name, is_active, availability_status, expires_at')
+        .eq('name', 'LAUNCH')
+        .maybeSingle();
+
+      if (error || !data) {
+        return 'STANDARD';
+      }
+
+      const availabilityStatus = this.normalizePromotionPlanAvailabilityStatus(
+        data.availability_status,
+      );
+      const expiresAt = data.expires_at ? new Date(data.expires_at) : null;
+      const isExpired = Boolean(expiresAt && expiresAt.getTime() <= Date.now());
+
+      if (!data.is_active || availabilityStatus !== 'AVAILABLE' || isExpired) {
+        return 'STANDARD';
+      }
+
+      return 'LAUNCH';
+    } catch (error) {
+      console.error('Failed to resolve default advertisement plan:', error);
+      return 'STANDARD';
+    }
   }
 
   private getPlanPriorityFromPosition(position: unknown): number {
