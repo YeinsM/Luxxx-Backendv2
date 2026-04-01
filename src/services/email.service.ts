@@ -14,12 +14,39 @@ type EmailBranding = {
   emailLogoUrl: string | null;
 };
 
+type EmailLayoutOptions = {
+  branding: EmailBranding;
+  headerHtml: string;
+  bodyHtml: string;
+  lang?: EmailLang;
+  title?: string;
+  width?: number;
+  outerPadding?: string;
+  headerPadding?: string;
+  bodyPadding?: string;
+  headerBackground?: string;
+  contentBackground?: string;
+  footerHtml?: string;
+};
+
 /**
  * Email Service using Resend API for sending notifications
  * Resend works better in cloud platforms like Render (no SMTP port blocks)
  */
 export class EmailService {
   private resend: Resend | null = null;
+  private readonly emailTheme = {
+    pageBg: '#1f2937',
+    cardBg: '#2d3748',
+    panelBg: '#374151',
+    footerBg: '#1f2937',
+    headerGradient: 'linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%)',
+    textPrimary: '#ffffff',
+    textSecondary: '#d1d5db',
+    textMuted: '#9ca3af',
+    footerText: '#6b7280',
+    footerNote: '#999999',
+  };
 
   constructor() {
     this.initializeResend();
@@ -112,6 +139,79 @@ export class EmailService {
 
   private getCopyrightLine(branding: EmailBranding, lang: EmailLang = 'es'): string {
     return `© ${new Date().getFullYear()} ${this.escapeHtml(branding.appName)}. ${emailT(lang, 'copyrightSuffix')}`;
+  }
+
+  private renderEmailFooter(
+    branding: EmailBranding,
+    lang: EmailLang = 'es',
+    noticeText: string | null = emailT(lang, 'autoEmailNotice'),
+  ): string {
+    const noticeHtml = noticeText
+      ? `<p style="color: ${this.emailTheme.footerNote}; font-size: 11px; margin: 10px 0 0 0;">${noticeText}</p>`
+      : '';
+
+    return `
+      <p style="color: ${this.emailTheme.footerText}; font-size: 13px; margin: 0;">
+        ${this.getCopyrightLine(branding, lang)}
+      </p>
+      ${noticeHtml}
+    `;
+  }
+
+  private renderLaunchThemeEmail({
+    branding,
+    headerHtml,
+    bodyHtml,
+    lang = 'es',
+    title,
+    width = 600,
+    outerPadding = '30px 0',
+    headerPadding = '50px 40px',
+    bodyPadding = '40px',
+    headerBackground = this.emailTheme.headerGradient,
+    contentBackground = this.emailTheme.cardBg,
+    footerHtml = this.renderEmailFooter(branding, lang),
+  }: EmailLayoutOptions): string {
+    const safeTitle = title ? `<title>${this.escapeHtml(title)}</title>` : '';
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        ${safeTitle}
+      </head>
+      <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: ${this.emailTheme.pageBg};">
+        <table width="100%" cellpadding="0" cellspacing="0" style="background-color: ${this.emailTheme.pageBg}; padding: ${outerPadding};">
+          <tr>
+            <td align="center">
+              <table width="${width}" cellpadding="0" cellspacing="0" style="background: ${headerBackground}; border-radius: 20px 20px 0 0; overflow: hidden;">
+                <tr>
+                  <td style="padding: ${headerPadding}; text-align: center;">
+                    ${headerHtml}
+                  </td>
+                </tr>
+              </table>
+
+              <table width="${width}" cellpadding="0" cellspacing="0" style="background-color: ${contentBackground}; border-radius: 0 0 20px 20px; overflow: hidden;">
+                <tr>
+                  <td style="padding: ${bodyPadding};">
+                    ${bodyHtml}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="background-color: ${this.emailTheme.footerBg}; padding: 25px 40px; text-align: center;">
+                    ${footerHtml}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </body>
+      </html>
+    `;
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -257,68 +357,43 @@ export class EmailService {
       const lang = resolveEmailLang(user.preferredLanguage);
       const brandLogo = this.renderBrandLogo(branding, { dark: true, maxWidth: 170, marginBottom: 18 });
       const verificationUrl = `${config.email.frontendUrl}/verify-email?token=${verificationToken}`;
-      
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
-            <tr>
-              <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                  <!-- Header -->
-                  <tr>
-                    <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
-                      ${brandLogo}
-                      <h1 style="color: #ffffff; margin: 0; font-size: 28px;">${emailT(lang, 'verifyEmailTitle')}</h1>
-                    </td>
-                  </tr>
-                  
-                  <!-- Content -->
-                  <tr>
-                    <td style="padding: 40px 30px;">
-                      <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 20px 0;">
-                        ${emailT(lang, 'verifyEmailGreeting')}
-                      </p>
-                      <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 30px 0;">
-                        ${emailT(lang, 'verifyEmailBody')}
-                      </p>
-                      
-                      <table width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td align="center" style="padding: 20px 0;">
-                            <a href="${verificationUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                              ${emailT(lang, 'verifyEmailButton')}
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-                      
-                      <p style="color: #666666; font-size: 14px; line-height: 20px; margin: 30px 0 0 0;">
-                        ${emailT(lang, 'verifyEmailIgnore')}
-                      </p>
-                    </td>
-                  </tr>
-                  
-                  <!-- Footer -->
-                  <tr>
-                    <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e9ecef;">
-                      <p style="color: #6c757d; font-size: 12px; margin: 0;">
-                        ${this.getCopyrightLine(branding, lang)}
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
+      const headerHtml = `
+        ${brandLogo}
+        <h1 style="color: ${this.emailTheme.textPrimary}; margin: 0; font-size: 30px; font-weight: bold;">${emailT(lang, 'verifyEmailTitle')}</h1>
       `;
+      const bodyHtml = `
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 16px; line-height: 24px; margin: 0 0 20px 0;">
+          ${emailT(lang, 'verifyEmailGreeting')}
+        </p>
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 16px; line-height: 24px; margin: 0 0 30px 0;">
+          ${emailT(lang, 'verifyEmailBody')}
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="padding: 20px 0 24px 0;">
+              <a href="${verificationUrl}" style="background: ${this.emailTheme.headerGradient}; color: ${this.emailTheme.textPrimary}; padding: 15px 40px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block;">
+                ${emailT(lang, 'verifyEmailButton')}
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <p style="color: ${this.emailTheme.textMuted}; font-size: 14px; line-height: 20px; margin: 0;">
+          ${emailT(lang, 'verifyEmailIgnore')}
+        </p>
+      `;
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        lang,
+        title: emailT(lang, 'verifyEmailTitle'),
+        headerHtml,
+        bodyHtml,
+        headerPadding: '40px 20px',
+        bodyPadding: '40px 30px',
+        outerPadding: '20px',
+        footerHtml: this.renderEmailFooter(branding, lang, null),
+      });
 
       const { data, error } = await this.resend.emails.send({
         from: this.getFromAddress(branding),
@@ -351,68 +426,48 @@ export class EmailService {
       const lang = resolveEmailLang(user.preferredLanguage);
       const brandLogo = this.renderBrandLogo(branding, { dark: true, maxWidth: 170, marginBottom: 18 });
       const resetUrl = `${config.email.frontendUrl}/reset-password?token=${resetToken}`;
-
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f4f4f4; padding: 20px;">
-            <tr>
-              <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                  <tr>
-                    <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
-                      ${brandLogo}
-                      <h1 style="color: #ffffff; margin: 0; font-size: 28px;">${emailT(lang, 'resetPasswordTitle')}</h1>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 40px 30px;">
-                      <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 20px 0;">
-                        ${emailT(lang, 'resetPasswordBody1')}
-                      </p>
-                      <p style="color: #333333; font-size: 16px; line-height: 24px; margin: 0 0 30px 0;">
-                        ${emailT(lang, 'resetPasswordBody2')}
-                      </p>
-
-                      <table width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td align="center" style="padding: 20px 0;">
-                            <a href="${resetUrl}" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #ffffff; padding: 15px 40px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">
-                              ${emailT(lang, 'resetPasswordButton')}
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <p style="color: #666666; font-size: 13px; line-height: 20px; margin: 30px 0 0 0; word-break: break-all;">
-                        ${emailT(lang, 'resetPasswordFallback')}<br/>
-                        <a href="${resetUrl}">${resetUrl}</a>
-                      </p>
-
-                      <p style="color: #666666; font-size: 14px; line-height: 20px; margin: 20px 0 0 0;">
-                        ${emailT(lang, 'resetPasswordIgnore')}
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="background-color: #f8f9fa; padding: 20px 30px; text-align: center; border-top: 1px solid #e9ecef;">
-                      <p style="color: #6c757d; font-size: 12px; margin: 0;">
-                        ${this.getCopyrightLine(branding, lang)}
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
+      const headerHtml = `
+        ${brandLogo}
+        <h1 style="color: ${this.emailTheme.textPrimary}; margin: 0; font-size: 30px; font-weight: bold;">${emailT(lang, 'resetPasswordTitle')}</h1>
       `;
+      const bodyHtml = `
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 16px; line-height: 24px; margin: 0 0 20px 0;">
+          ${emailT(lang, 'resetPasswordBody1')}
+        </p>
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 16px; line-height: 24px; margin: 0 0 30px 0;">
+          ${emailT(lang, 'resetPasswordBody2')}
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="padding: 20px 0 24px 0;">
+              <a href="${resetUrl}" style="background: ${this.emailTheme.headerGradient}; color: ${this.emailTheme.textPrimary}; padding: 15px 40px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block;">
+                ${emailT(lang, 'resetPasswordButton')}
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <p style="color: ${this.emailTheme.textMuted}; font-size: 13px; line-height: 20px; margin: 0 0 20px 0; word-break: break-all;">
+          ${emailT(lang, 'resetPasswordFallback')}<br/>
+          <a href="${resetUrl}" style="color: #f9a8d4;">${resetUrl}</a>
+        </p>
+
+        <p style="color: ${this.emailTheme.textMuted}; font-size: 14px; line-height: 20px; margin: 0;">
+          ${emailT(lang, 'resetPasswordIgnore')}
+        </p>
+      `;
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        lang,
+        title: emailT(lang, 'resetPasswordTitle'),
+        headerHtml,
+        bodyHtml,
+        headerPadding: '40px 20px',
+        bodyPadding: '40px 30px',
+        outerPadding: '20px',
+        footerHtml: this.renderEmailFooter(branding, lang, null),
+      });
 
       const { data, error } = await this.resend.emails.send({
         from: this.getFromAddress(branding),
@@ -841,54 +896,37 @@ ${emailT(lang, 'autoEmailFooter')}
     try {
       const branding = await this.getEmailBranding();
       const brandLogo = this.renderBrandLogo(branding, { dark: true, maxWidth: 170, marginBottom: 18 });
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        </head>
-        <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#f4f4f4;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:20px;">
-            <tr>
-              <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-                  <tr>
-                    <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:40px 20px;text-align:center;">
-                      ${brandLogo}
-                      <h1 style="color:#ffffff;margin:0;font-size:26px;">${emailT(lang, 'otpTitle')}</h1>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:40px 30px;text-align:center;">
-                      <p style="color:#333333;font-size:16px;line-height:24px;margin:0 0 20px 0;">
-                        ${emailT(lang, 'otpBody')}
-                      </p>
-                      <div style="background:linear-gradient(135deg,#f3f0ff 0%,#fce7f3 100%);border:2px solid #a78bfa;border-radius:12px;padding:24px 40px;display:inline-block;margin:10px 0 20px 0;">
-                        <span style="font-size:42px;font-weight:900;letter-spacing:10px;color:#6d28d9;font-family:'Courier New',monospace;">${otpCode}</span>
-                      </div>
-                      <p style="color:#6b7280;font-size:14px;margin:16px 0 0 0;">
-                        ${emailT(lang, 'otpExpires')}
-                      </p>
-                      <p style="color:#9ca3af;font-size:13px;margin:10px 0 0 0;">
-                        ${emailT(lang, 'otpIgnore')}
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="background-color:#f8f9fa;padding:20px 30px;text-align:center;border-top:1px solid #e9ecef;">
-                      <p style="color:#6c757d;font-size:12px;margin:0;">
-                        ${this.getCopyrightLine(branding, lang)}
-                      </p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
+      const headerHtml = `
+        ${brandLogo}
+        <h1 style="color: ${this.emailTheme.textPrimary}; margin: 0; font-size: 28px; font-weight: bold;">${emailT(lang, 'otpTitle')}</h1>
       `;
+      const bodyHtml = `
+        <div style="text-align: center;">
+          <p style="color: ${this.emailTheme.textSecondary}; font-size: 16px; line-height: 24px; margin: 0 0 20px 0;">
+            ${emailT(lang, 'otpBody')}
+          </p>
+          <div style="background-color: ${this.emailTheme.panelBg}; border: 2px solid #a78bfa; border-radius: 14px; padding: 24px 40px; display: inline-block; margin: 10px 0 20px 0;">
+            <span style="font-size: 42px; font-weight: 900; letter-spacing: 10px; color: #f5d0fe; font-family: 'Courier New', monospace;">${otpCode}</span>
+          </div>
+          <p style="color: ${this.emailTheme.textMuted}; font-size: 14px; margin: 16px 0 0 0;">
+            ${emailT(lang, 'otpExpires')}
+          </p>
+          <p style="color: ${this.emailTheme.textMuted}; font-size: 13px; margin: 10px 0 0 0;">
+            ${emailT(lang, 'otpIgnore')}
+          </p>
+        </div>
+      `;
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        lang,
+        title: emailT(lang, 'otpTitle'),
+        headerHtml,
+        bodyHtml,
+        headerPadding: '40px 20px',
+        bodyPadding: '40px 30px',
+        outerPadding: '20px',
+        footerHtml: this.renderEmailFooter(branding, lang, null),
+      });
 
       const { data, error } = await this.resend.emails.send({
         from: this.getFromAddress(branding),
@@ -923,64 +961,50 @@ ${emailT(lang, 'autoEmailFooter')}
     try {
       const branding = await this.getEmailBranding();
       const brandLogo = this.renderBrandLogo(branding, { dark: true, maxWidth: 150, marginBottom: 18 });
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-        <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#0f172a;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:30px 0;">
-            <tr>
-              <td align="center">
-                <table width="560" cellpadding="0" cellspacing="0" style="background-color:#1e293b;border-radius:16px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-                  <tr>
-                    <td style="background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);border-bottom:2px solid #334155;padding:40px 40px 30px 40px;text-align:center;">
-                      ${brandLogo}
-                      <h1 style="color:#f1f5f9;margin:0;font-size:24px;font-weight:700;">Invitación Administrativa</h1>
-                      <p style="color:#94a3b8;margin:8px 0 0 0;font-size:14px;">Acceso exclusivo para administradores</p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:36px 40px;">
-                      <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 16px 0;">
-                        Se ha creado una cuenta de administrador para <strong style="color:#f1f5f9;">${email}</strong> en ${this.escapeHtml(branding.appName)}.
-                      </p>
-                      <p style="color:#cbd5e1;font-size:15px;line-height:1.6;margin:0 0 28px 0;">
-                        Haz clic en el botón de abajo para crear tu contraseña. Este enlace expira en <strong style="color:#f472b6;">15 minutos</strong>.
-                      </p>
-
-                      <table width="100%" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td align="center" style="padding:0 0 28px 0;">
-                            <a href="${setupLink}"
-                               style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#ffffff;padding:14px 36px;text-decoration:none;border-radius:10px;display:inline-block;font-weight:700;font-size:15px;letter-spacing:0.5px;">
-                              Crear mi contraseña
-                            </a>
-                          </td>
-                        </tr>
-                      </table>
-
-                      <div style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:16px 20px;">
-                        <p style="color:#64748b;font-size:12px;margin:0 0 6px 0;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Enlace directo</p>
-                        <p style="color:#475569;font-size:12px;margin:0;word-break:break-all;">${setupLink}</p>
-                      </div>
-
-                      <p style="color:#475569;font-size:13px;margin:24px 0 0 0;line-height:1.5;">
-                        Si no esperabas esta invitación, ignora este correo y no hagas clic en el enlace.
-                      </p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="border-top:1px solid #1e293b;background:#0f172a;padding:20px 40px;text-align:center;">
-                      <p style="color:#475569;font-size:12px;margin:0;">${this.getCopyrightLine(branding)} · Correo automático — no responder</p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
+      const safeEmail = this.escapeHtml(email);
+      const safeSetupLink = this.escapeHtml(setupLink);
+      const headerHtml = `
+        ${brandLogo}
+        <h1 style="color: ${this.emailTheme.textPrimary}; margin: 0; font-size: 24px; font-weight: 700;">Invitación Administrativa</h1>
+        <p style="color: #fce7f3; margin: 8px 0 0 0; font-size: 14px;">Acceso exclusivo para administradores</p>
       `;
+      const bodyHtml = `
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 15px; line-height: 1.6; margin: 0 0 16px 0;">
+          Se ha creado una cuenta de administrador para <strong style="color: ${this.emailTheme.textPrimary};">${safeEmail}</strong> en ${this.escapeHtml(branding.appName)}.
+        </p>
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 15px; line-height: 1.6; margin: 0 0 28px 0;">
+          Haz clic en el botón de abajo para crear tu contraseña. Este enlace expira en <strong style="color: #f472b6;">15 minutos</strong>.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td align="center" style="padding: 0 0 28px 0;">
+              <a href="${setupLink}" style="background: ${this.emailTheme.headerGradient}; color: ${this.emailTheme.textPrimary}; padding: 14px 36px; text-decoration: none; border-radius: 10px; display: inline-block; font-weight: 700; font-size: 15px; letter-spacing: 0.5px;">
+                Crear mi contraseña
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <div style="background: ${this.emailTheme.panelBg}; border: 1px solid #4b5563; border-radius: 8px; padding: 16px 20px;">
+          <p style="color: ${this.emailTheme.textMuted}; font-size: 12px; margin: 0 0 6px 0; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Enlace directo</p>
+          <p style="color: #cbd5e1; font-size: 12px; margin: 0; word-break: break-all;">${safeSetupLink}</p>
+        </div>
+
+        <p style="color: ${this.emailTheme.textMuted}; font-size: 13px; margin: 24px 0 0 0; line-height: 1.5;">
+          Si no esperabas esta invitación, ignora este correo y no hagas clic en el enlace.
+        </p>
+      `;
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        title: 'Invitación Administrativa',
+        width: 560,
+        headerHtml,
+        bodyHtml,
+        headerPadding: '40px 40px 30px 40px',
+        bodyPadding: '36px 40px',
+        footerHtml: this.renderEmailFooter(branding, 'es', 'Correo automático — no responder'),
+      });
 
       const { data, error } = await this.resend.emails.send({
         from: this.getFromAddress(branding),
@@ -1018,74 +1042,65 @@ ${emailT(lang, 'autoEmailFooter')}
     }
     try {
       const branding = await this.getEmailBranding();
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"></head>
-        <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#0f172a;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#0f172a;padding:30px 0;">
-            <tr>
-              <td align="center">
-                <table width="560" cellpadding="0" cellspacing="0" style="background-color:#1e293b;border-radius:12px;overflow:hidden;">
-                  <tr>
-                    <td style="background:#7f1d1d;padding:28px 36px;text-align:center;">
-                      <p style="color:#fecaca;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin:0 0 8px 0;">⚠ Alerta de Seguridad</p>
-                      <h1 style="color:#fef2f2;margin:0;font-size:22px;font-weight:800;">Intento de acceso sospechoso</h1>
-                      <p style="color:#fca5a5;font-size:13px;margin:8px 0 0 0;">Panel de Administración · ${this.escapeHtml(branding.appName)}</p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:32px 36px;">
-                      <p style="color:#cbd5e1;font-size:14px;line-height:1.6;margin:0 0 24px 0;">
-                        Se detectó un intento de inicio de sesión en el panel administrativo con un email que <strong style="color:#f87171;">no corresponde a ningún administrador registrado</strong>.
-                      </p>
-
-                      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #334155;border-radius:8px;overflow:hidden;">
-                        <tr style="background:#0f172a;">
-                          <td style="padding:10px 16px;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;width:38%;">Campo</td>
-                          <td style="padding:10px 16px;color:#94a3b8;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Valor</td>
-                        </tr>
-                        <tr style="border-top:1px solid #1e293b;">
-                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Email intentado</td>
-                          <td style="padding:12px 16px;color:#f87171;font-size:13px;font-weight:600;">${details.attemptedEmail}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #1e293b;background:#0f172a38;">
-                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Dirección IP</td>
-                          <td style="padding:12px 16px;color:#e2e8f0;font-size:13px;font-family:monospace;">${details.ip}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #1e293b;">
-                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Fecha y hora</td>
-                          <td style="padding:12px 16px;color:#e2e8f0;font-size:13px;">${details.timestamp}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #1e293b;background:#0f172a38;">
-                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">Origen</td>
-                          <td style="padding:12px 16px;color:#e2e8f0;font-size:13px;">${details.origin}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #1e293b;">
-                          <td style="padding:12px 16px;color:#64748b;font-size:13px;font-weight:600;">User-Agent</td>
-                          <td style="padding:12px 16px;color:#94a3b8;font-size:12px;word-break:break-all;">${details.userAgent}</td>
-                        </tr>
-                      </table>
-
-                      <div style="background:#450a0a;border:1px solid #7f1d1d;border-radius:8px;padding:16px 20px;margin-top:24px;">
-                        <p style="color:#fca5a5;font-size:13px;margin:0;line-height:1.6;">
-                          <strong>Acción recomendada:</strong> Si reconoces esta actividad, puedes ignorar esta alerta. Si no, revisa el acceso a tu panel y considera cambiar las credenciales de tus administradores.
-                        </p>
-                      </div>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="border-top:1px solid #1e293b;background:#0f172a;padding:16px 36px;text-align:center;">
-                      <p style="color:#475569;font-size:12px;margin:0;">${this.getCopyrightLine(branding)} · Alerta automática de seguridad</p>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
+      const safeAttemptedEmail = this.escapeHtml(details.attemptedEmail);
+      const safeIp = this.escapeHtml(details.ip);
+      const safeTimestamp = this.escapeHtml(details.timestamp);
+      const safeOrigin = this.escapeHtml(details.origin);
+      const safeUserAgent = this.escapeHtml(details.userAgent);
+      const headerHtml = `
+        <p style="color: #fecaca; font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin: 0 0 8px 0;">⚠ Alerta de Seguridad</p>
+        <h1 style="color: #fef2f2; margin: 0; font-size: 22px; font-weight: 800;">Intento de acceso sospechoso</h1>
+        <p style="color: #fca5a5; font-size: 13px; margin: 8px 0 0 0;">Panel de Administración · ${this.escapeHtml(branding.appName)}</p>
       `;
+      const bodyHtml = `
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">
+          Se detectó un intento de inicio de sesión en el panel administrativo con un email que <strong style="color: #f87171;">no corresponde a ningún administrador registrado</strong>.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #4b5563; border-radius: 8px; overflow: hidden;">
+          <tr style="background: ${this.emailTheme.panelBg};">
+            <td style="padding: 10px 16px; color: ${this.emailTheme.textMuted}; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; width: 38%;">Campo</td>
+            <td style="padding: 10px 16px; color: ${this.emailTheme.textMuted}; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Valor</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Email intentado</td>
+            <td style="padding: 12px 16px; color: #f87171; font-size: 13px; font-weight: 600;">${safeAttemptedEmail}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Dirección IP</td>
+            <td style="padding: 12px 16px; color: #e2e8f0; font-size: 13px; font-family: monospace;">${safeIp}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Fecha y hora</td>
+            <td style="padding: 12px 16px; color: #e2e8f0; font-size: 13px;">${safeTimestamp}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Origen</td>
+            <td style="padding: 12px 16px; color: #e2e8f0; font-size: 13px;">${safeOrigin}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">User-Agent</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 12px; word-break: break-all;">${safeUserAgent}</td>
+          </tr>
+        </table>
+
+        <div style="background: #450a0a; border: 1px solid #7f1d1d; border-radius: 8px; padding: 16px 20px; margin-top: 24px;">
+          <p style="color: #fca5a5; font-size: 13px; margin: 0; line-height: 1.6;">
+            <strong>Acción recomendada:</strong> Si reconoces esta actividad, puedes ignorar esta alerta. Si no, revisa el acceso a tu panel y considera cambiar las credenciales de tus administradores.
+          </p>
+        </div>
+      `;
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        title: 'Alerta de Seguridad',
+        width: 560,
+        headerHtml,
+        bodyHtml,
+        headerPadding: '28px 36px',
+        bodyPadding: '32px 36px',
+        headerBackground: 'linear-gradient(135deg, #7f1d1d 0%, #450a0a 100%)',
+        footerHtml: this.renderEmailFooter(branding, 'es', 'Alerta automática de seguridad'),
+      });
 
       const { data, error } = await this.resend.emails.send({
         from: this.getFromAddress(branding),
@@ -1138,81 +1153,71 @@ ${emailT(lang, 'autoEmailFooter')}
             .map((item) => `<li style="margin:0 0 6px 0;">${this.escapeHtml(item)}</li>`)
             .join('')
         : '<li style="margin:0;">No detailed services selected</li>';
-
-      const html = `
-        <!DOCTYPE html>
-        <html>
-        <head><meta charset="UTF-8"></head>
-        <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#fff7ed;">
-          <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#fff7ed;padding:30px 0;">
-            <tr>
-              <td align="center">
-                <table width="620" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #fed7aa;">
-                  <tr>
-                    <td style="background:#c2410c;padding:28px 36px;text-align:center;">
-                      <p style="color:#ffedd5;font-size:12px;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin:0 0 8px 0;">Service suggestion inbox</p>
-                      <h1 style="color:#fff7ed;margin:0;font-size:22px;font-weight:800;">New missing-service suggestion</h1>
-                      <p style="color:#fdba74;font-size:13px;margin:8px 0 0 0;">${this.escapeHtml(branding.appName)} · Submitted from the model management panel</p>
-                    </td>
-                  </tr>
-                  <tr>
-                    <td style="padding:32px 36px;">
-                      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
-                        <tr style="background:#fff7ed;">
-                          <td style="padding:10px 16px;color:#9a3412;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;width:38%;">Field</td>
-                          <td style="padding:10px 16px;color:#9a3412;font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:1px;">Value</td>
-                        </tr>
-                        <tr style="border-top:1px solid #e5e7eb;">
-                          <td style="padding:12px 16px;color:#7c2d12;font-size:13px;font-weight:600;">Profile name</td>
-                          <td style="padding:12px 16px;color:#111827;font-size:13px;">${safeProfileName}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #e5e7eb;background:#fff7ed;">
-                          <td style="padding:12px 16px;color:#7c2d12;font-size:13px;font-weight:600;">Advertisement title</td>
-                          <td style="padding:12px 16px;color:#111827;font-size:13px;">${safeAdvertisementTitle}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #e5e7eb;">
-                          <td style="padding:12px 16px;color:#7c2d12;font-size:13px;font-weight:600;">User email</td>
-                          <td style="padding:12px 16px;color:#111827;font-size:13px;">${safeUserEmail}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #e5e7eb;background:#fff7ed;">
-                          <td style="padding:12px 16px;color:#7c2d12;font-size:13px;font-weight:600;">User ID</td>
-                          <td style="padding:12px 16px;color:#111827;font-size:13px;font-family:monospace;">${safeUserId}</td>
-                        </tr>
-                        <tr style="border-top:1px solid #e5e7eb;">
-                          <td style="padding:12px 16px;color:#7c2d12;font-size:13px;font-weight:600;">Timestamp</td>
-                          <td style="padding:12px 16px;color:#111827;font-size:13px;">${this.escapeHtml(details.timestamp)}</td>
-                        </tr>
-                      </table>
-
-                      <div style="margin-top:24px;">
-                        <p style="margin:0 0 10px 0;color:#9a3412;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Suggested service</p>
-                        <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:16px;color:#7c2d12;font-size:14px;line-height:1.7;">
-                          ${safeMessage}
-                        </div>
-                      </div>
-
-                      <div style="margin-top:24px;">
-                        <p style="margin:0 0 10px 0;color:#9a3412;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Selected service categories</p>
-                        <ul style="margin:0;padding-left:20px;color:#374151;font-size:13px;line-height:1.7;">
-                          ${categoryItems}
-                        </ul>
-                      </div>
-
-                      <div style="margin-top:20px;">
-                        <p style="margin:0 0 10px 0;color:#9a3412;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;">Selected detailed services</p>
-                        <ul style="margin:0;padding-left:20px;color:#374151;font-size:13px;line-height:1.7;">
-                          ${serviceItems}
-                        </ul>
-                      </div>
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-          </table>
-        </body>
-        </html>
+      const headerHtml = `
+        <p style="color: #ffedd5; font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin: 0 0 8px 0;">Service suggestion inbox</p>
+        <h1 style="color: #fff7ed; margin: 0; font-size: 22px; font-weight: 800;">New missing-service suggestion</h1>
+        <p style="color: #fdba74; font-size: 13px; margin: 8px 0 0 0;">${this.escapeHtml(branding.appName)} · Submitted from the model management panel</p>
       `;
+      const bodyHtml = `
+        <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #4b5563; border-radius: 8px; overflow: hidden;">
+          <tr style="background: ${this.emailTheme.panelBg};">
+            <td style="padding: 10px 16px; color: #fdba74; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; width: 38%;">Field</td>
+            <td style="padding: 10px 16px; color: #fdba74; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Value</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: #fdba74; font-size: 13px; font-weight: 600;">Profile name</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeProfileName}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: #fdba74; font-size: 13px; font-weight: 600;">Advertisement title</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeAdvertisementTitle}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: #fdba74; font-size: 13px; font-weight: 600;">User email</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeUserEmail}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: #fdba74; font-size: 13px; font-weight: 600;">User ID</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px; font-family: monospace;">${safeUserId}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: #fdba74; font-size: 13px; font-weight: 600;">Timestamp</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${this.escapeHtml(details.timestamp)}</td>
+          </tr>
+        </table>
+
+        <div style="margin-top: 24px;">
+          <p style="margin: 0 0 10px 0; color: #fdba74; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Suggested service</p>
+          <div style="background: ${this.emailTheme.panelBg}; border: 1px solid #9a3412; border-radius: 8px; padding: 16px; color: #ffedd5; font-size: 14px; line-height: 1.7;">
+            ${safeMessage}
+          </div>
+        </div>
+
+        <div style="margin-top: 24px;">
+          <p style="margin: 0 0 10px 0; color: #fdba74; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Selected service categories</p>
+          <ul style="margin: 0; padding-left: 20px; color: ${this.emailTheme.textSecondary}; font-size: 13px; line-height: 1.7;">
+            ${categoryItems}
+          </ul>
+        </div>
+
+        <div style="margin-top: 20px;">
+          <p style="margin: 0 0 10px 0; color: #fdba74; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">Selected detailed services</p>
+          <ul style="margin: 0; padding-left: 20px; color: ${this.emailTheme.textSecondary}; font-size: 13px; line-height: 1.7;">
+            ${serviceItems}
+          </ul>
+        </div>
+      `;
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        title: 'Service suggestion inbox',
+        width: 620,
+        headerHtml,
+        bodyHtml,
+        headerPadding: '28px 36px',
+        bodyPadding: '32px 36px',
+        headerBackground: 'linear-gradient(135deg, #c2410c 0%, #ea580c 100%)',
+        footerHtml: this.renderEmailFooter(branding, 'es', null),
+      });
 
       const { data, error } = await this.resend.emails.send({
         from: this.getFromAddress(branding),
@@ -1257,70 +1262,52 @@ ${emailT(lang, 'autoEmailFooter')}
       ? `✅ ${emailT(lang, 'verifiedSubject').replace('{adName}', adName)} - ${branding.appName}`
       : `❌ ${emailT(lang, 'rejectedSubject').replace('{adName}', adName)} - ${branding.appName}`;
 
-    const statusColor = isVerified ? '#16a34a' : '#dc2626';
-    const statusBg = isVerified ? '#f0fdf4' : '#fef2f2';
+    const statusColor = isVerified ? '#4ade80' : '#f87171';
+    const statusBg = isVerified ? '#052e16' : '#450a0a';
     const statusLabel = isVerified ? emailT(lang, 'statusVerified') : emailT(lang, 'statusRejected');
     const statusIcon = isVerified ? '✅' : '❌';
+    const headingText = subject.replace(/^[✅❌] /, '');
+    const safeHeading = this.escapeHtml(headingText);
+    const safeComment = comment ? this.escapeHtml(comment) : '';
 
     const commentBlock = !isVerified && comment
       ? `
-        <tr>
-          <td style="padding: 0 30px 30px 30px;">
-            <div style="background-color: #fff7ed; border-left: 4px solid #f97316; border-radius: 4px; padding: 16px 20px;">
-              <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #92400e; text-transform: uppercase; letter-spacing: 0.05em;">
-                ${emailT(lang, 'rejectionReason')}
-              </p>
-              <p style="margin: 0; font-size: 15px; color: #451a03; line-height: 1.6;">${comment}</p>
-            </div>
-          </td>
-        </tr>`
+        <div style="background-color: #3f2a14; border-left: 4px solid #f97316; border-radius: 8px; padding: 16px 20px; margin: 28px 0 0 0; text-align: left;">
+          <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: 700; color: #fdba74; text-transform: uppercase; letter-spacing: 0.05em;">
+            ${emailT(lang, 'rejectionReason')}
+          </p>
+          <p style="margin: 0; font-size: 15px; color: #fed7aa; line-height: 1.6;">${safeComment}</p>
+        </div>`
       : '';
-
-    const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#f4f4f4;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:20px;">
-    <tr><td align="center">
-      <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.1);">
-        <tr>
-          <td style="background:linear-gradient(135deg,#1a1a2e 0%,#16213e 100%);padding:40px 20px;text-align:center;">
-            ${brandLogo}
-            <p style="color:rgba(255,255,255,0.6);margin:6px 0 0 0;font-size:13px;">${emailT(lang, 'verificationPanel')}</p>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding:36px 30px 20px 30px;text-align:center;">
-            <div style="display:inline-block;background-color:${statusBg};border:1.5px solid ${statusColor};border-radius:999px;padding:8px 22px;margin-bottom:20px;">
-              <span style="color:${statusColor};font-size:14px;font-weight:700;letter-spacing:0.08em;">${statusIcon} ${statusLabel}</span>
-            </div>
-            <h2 style="margin:0 0 10px 0;font-size:20px;color:#111827;">${subject.replace(/^[✅❌] /, '')}</h2>
-            <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.6;">
-              ${isVerified
-                ? emailT(lang, 'verifiedBody')
-                : emailT(lang, 'rejectedBody')}
-            </p>
-          </td>
-        </tr>
+    const headerHtml = `
+      ${brandLogo}
+      <p style="color: rgba(255, 255, 255, 0.75); margin: 6px 0 0 0; font-size: 13px;">${emailT(lang, 'verificationPanel')}</p>
+    `;
+    const bodyHtml = `
+      <div style="text-align: center;">
+        <div style="display: inline-block; background-color: ${statusBg}; border: 1.5px solid ${statusColor}; border-radius: 999px; padding: 8px 22px; margin-bottom: 20px;">
+          <span style="color: ${statusColor}; font-size: 14px; font-weight: 700; letter-spacing: 0.08em;">${statusIcon} ${statusLabel}</span>
+        </div>
+        <h2 style="margin: 0 0 10px 0; font-size: 20px; color: ${this.emailTheme.textPrimary};">${safeHeading}</h2>
+        <p style="margin: 0; font-size: 15px; color: ${this.emailTheme.textSecondary}; line-height: 1.6;">
+          ${isVerified ? emailT(lang, 'verifiedBody') : emailT(lang, 'rejectedBody')}
+        </p>
         ${commentBlock}
-        <tr>
-          <td style="padding:0 30px 36px 30px;text-align:center;">
-            <p style="margin:0;font-size:13px;color:#9ca3af;">
-              ${emailT(lang, 'verificationContactSupport')}
-            </p>
-          </td>
-        </tr>
-        <tr>
-          <td style="background-color:#f9fafb;padding:16px 30px;border-top:1px solid #e5e7eb;text-align:center;">
-            <p style="margin:0 0 8px 0;font-size:12px;color:#6b7280;">${this.getCopyrightLine(branding, lang)}</p>
-            <p style="margin:0;font-size:12px;color:#9ca3af;">${emailT(lang, 'autoEmailNotice')}</p>
-          </td>
-        </tr>
-      </table>
-    </td></tr>
-  </table>
-</body>
-</html>`;
+        <p style="margin: 28px 0 0 0; font-size: 13px; color: ${this.emailTheme.textMuted};">
+          ${emailT(lang, 'verificationContactSupport')}
+        </p>
+      </div>
+    `;
+    const html = this.renderLaunchThemeEmail({
+      branding,
+      lang,
+      title: headingText,
+      headerHtml,
+      bodyHtml,
+      headerPadding: '40px 20px',
+      bodyPadding: '36px 30px',
+      outerPadding: '20px',
+    });
 
     try {
       const { data, error } = await this.resend.emails.send({
@@ -1499,29 +1486,38 @@ ${branding.appName}
       const safeSender = this.escapeHtml(senderEmail);
       const safeTopic = this.escapeHtml(topic);
       const safeMessage = this.escapeHtml(message).replace(/\n/g, '<br>');
-
-      const html = `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;">
-          <h2 style="color:#1e293b;">New Contact Form Submission</h2>
-          <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-            <tr>
-              <td style="padding:8px 12px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;width:120px;">From</td>
-              <td style="padding:8px 12px;border:1px solid #e2e8f0;">${safeSender}</td>
-            </tr>
-            <tr>
-              <td style="padding:8px 12px;border:1px solid #e2e8f0;background:#f8fafc;font-weight:600;">Topic</td>
-              <td style="padding:8px 12px;border:1px solid #e2e8f0;">${safeTopic}</td>
-            </tr>
-          </table>
-          <div style="padding:16px;border:1px solid #e2e8f0;border-radius:8px;background:#fafafa;margin-top:12px;">
-            <p style="margin:0 0 8px 0;font-weight:600;color:#1e293b;">Message:</p>
-            <p style="margin:0;color:#334155;line-height:1.6;">${safeMessage}</p>
-          </div>
-          <p style="margin-top:20px;font-size:12px;color:#94a3b8;">
-            ${this.escapeHtml(branding.appName)} — Contact Form
-          </p>
+      const brandLogo = this.renderBrandLogo(branding, { dark: true, maxWidth: 150, marginBottom: 18 });
+      const headerHtml = `
+        ${brandLogo}
+        <h1 style="color: ${this.emailTheme.textPrimary}; margin: 0; font-size: 24px; font-weight: 700;">New Contact Form Submission</h1>
+        <p style="color: #fce7f3; margin: 8px 0 0 0; font-size: 14px;">${this.escapeHtml(branding.appName)} contact inbox</p>
+      `;
+      const bodyHtml = `
+        <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse: collapse; margin: 0 0 16px 0; border: 1px solid #4b5563; border-radius: 8px; overflow: hidden;">
+          <tr style="background: ${this.emailTheme.panelBg};">
+            <td style="padding: 10px 12px; border-right: 1px solid #4b5563; color: #f9a8d4; font-weight: 600; width: 120px;">From</td>
+            <td style="padding: 10px 12px; color: ${this.emailTheme.textPrimary};">${safeSender}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 10px 12px; border-right: 1px solid #4b5563; color: #f9a8d4; font-weight: 600;">Topic</td>
+            <td style="padding: 10px 12px; color: ${this.emailTheme.textPrimary};">${safeTopic}</td>
+          </tr>
+        </table>
+        <div style="padding: 16px; border: 1px solid #4b5563; border-radius: 8px; background: ${this.emailTheme.panelBg}; margin-top: 12px;">
+          <p style="margin: 0 0 8px 0; font-weight: 600; color: #f9a8d4;">Message:</p>
+          <p style="margin: 0; color: ${this.emailTheme.textSecondary}; line-height: 1.6;">${safeMessage}</p>
         </div>
       `;
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        title: 'New Contact Form Submission',
+        headerHtml,
+        bodyHtml,
+        headerPadding: '40px 20px',
+        bodyPadding: '32px 30px',
+        outerPadding: '20px',
+        footerHtml: this.renderEmailFooter(branding, 'es', 'Formulario de contacto'),
+      });
 
       const text = `New Contact Form\nFrom: ${senderEmail}\nTopic: ${topic}\n\nMessage:\n${message}`;
 
