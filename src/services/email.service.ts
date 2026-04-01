@@ -3,6 +3,7 @@
 // ══════════════════════════════════════════════════════════════
 import { Resend } from 'resend';
 import { config } from '../config';
+import { Advertisement } from '../models/advertisement.model';
 import { User, UserType } from '../models/user.model';
 import { getAppDatabaseService } from './app-database.service';
 import { EmailLang, resolveEmailLang, emailT } from '../utils/email-translations';
@@ -173,6 +174,21 @@ export class EmailService {
         return 'Club';
       default:
         return 'Usuario';
+    }
+  }
+
+  private getVerificationIdTypeLabel(idType?: string): string {
+    switch ((idType || '').trim().toLowerCase()) {
+      case 'identity_document':
+        return 'Documento de identidad';
+      case 'passport':
+        return 'Pasaporte';
+      case 'driver_license':
+        return 'Licencia de conducir';
+      case 'residence_permit':
+        return 'Permiso de residencia';
+      default:
+        return idType?.trim() || 'No especificado';
     }
   }
 
@@ -1148,6 +1164,114 @@ ${emailT(lang, 'autoEmailFooter')}
       return true;
     } catch (err) {
       console.error('❌ New user alert email error:', err);
+      return false;
+    }
+  }
+
+  async sendDocumentVerificationSubmittedAlert(
+    adminEmail: string,
+    advertisement: Advertisement,
+    userEmail?: string,
+  ): Promise<boolean> {
+    if (!this.resend) {
+      console.warn('⚠️  Document verification alert not sent — Resend not configured');
+      return false;
+    }
+
+    try {
+      const branding = await this.getEmailBranding();
+      const safeProfileName = this.escapeHtml(advertisement.name || 'Sin nombre');
+      const safeUserEmail = this.escapeHtml(userEmail || 'No disponible');
+      const safeIdType = this.escapeHtml(this.getVerificationIdTypeLabel(advertisement.idType));
+      const safeCity = this.escapeHtml(advertisement.city || 'No especificada');
+      const safeCategory = this.escapeHtml(advertisement.category || 'No especificada');
+      const safeAdId = this.escapeHtml(advertisement.id);
+      const safeTimestamp = this.escapeHtml(
+        new Intl.DateTimeFormat('es-ES', {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        }).format(advertisement.updatedAt ?? new Date())
+      );
+
+      const headerHtml = `
+        <p style="color: #fde68a; font-size: 12px; font-weight: 700; letter-spacing: 3px; text-transform: uppercase; margin: 0 0 8px 0;">Notificación administrativa</p>
+        <h1 style="color: #fff7ed; margin: 0; font-size: 22px; font-weight: 800;">Nueva verificación de documentos enviada</h1>
+        <p style="color: #fed7aa; font-size: 13px; margin: 8px 0 0 0;">${this.escapeHtml(branding.appName)} · Revisión pendiente para administradores</p>
+      `;
+
+      const bodyHtml = `
+        <p style="color: ${this.emailTheme.textSecondary}; font-size: 14px; line-height: 1.6; margin: 0 0 24px 0;">
+          Un usuario acaba de enviar su documentación para revisión manual. El expediente ya quedó en estado <strong style="color: ${this.emailTheme.textPrimary};">SUBMITTED</strong>.
+        </p>
+
+        <table width="100%" cellpadding="0" cellspacing="0" style="border: 1px solid #4b5563; border-radius: 8px; overflow: hidden;">
+          <tr style="background: ${this.emailTheme.panelBg};">
+            <td style="padding: 10px 16px; color: #fcd34d; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; width: 38%;">Campo</td>
+            <td style="padding: 10px 16px; color: #fcd34d; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Valor</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Perfil</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px; font-weight: 700;">${safeProfileName}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Email del usuario</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeUserEmail}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Tipo de documento</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeIdType}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Ciudad</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeCity}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Categoría del anuncio</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeCategory}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563; background: ${this.emailTheme.panelBg};">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">ID del anuncio</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeAdId}</td>
+          </tr>
+          <tr style="border-top: 1px solid #4b5563;">
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textMuted}; font-size: 13px; font-weight: 600;">Fecha de envío</td>
+            <td style="padding: 12px 16px; color: ${this.emailTheme.textPrimary}; font-size: 13px;">${safeTimestamp}</td>
+          </tr>
+        </table>
+
+        <p style="color: ${this.emailTheme.textMuted}; font-size: 13px; margin: 24px 0 0 0; line-height: 1.6;">
+          Este correo es informativo y se envía automáticamente cada vez que un usuario remite documentación para verificación.
+        </p>
+      `;
+
+      const html = this.renderLaunchThemeEmail({
+        branding,
+        title: 'Nueva verificación de documentos enviada',
+        width: 560,
+        headerHtml,
+        bodyHtml,
+        headerPadding: '28px 36px',
+        bodyPadding: '32px 36px',
+        headerBackground: 'linear-gradient(135deg, #d97706 0%, #9a3412 100%)',
+        footerHtml: this.renderEmailFooter(branding, 'es', 'Notificación automática para administradores'),
+      });
+
+      const { data, error } = await this.resend.emails.send({
+        from: this.getFromAddress(branding),
+        to: [adminEmail],
+        subject: `🪪 Nueva verificación enviada - ${branding.appName}`,
+        html,
+      });
+
+      if (error) {
+        console.error('❌ Document verification alert email failed:', error);
+        return false;
+      }
+
+      console.log(`✅ Document verification alert sent to ${adminEmail} (ID: ${data?.id})`);
+      return true;
+    } catch (err) {
+      console.error('❌ Document verification alert email error:', err);
       return false;
     }
   }

@@ -1,6 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import { validationResult } from 'express-validator';
+import { Advertisement } from '../models/advertisement.model';
 import { getAppDatabaseService } from '../services/app-database.service';
+import { getDatabaseService } from '../services/database.service';
 import { getEmailService } from '../services/email.service';
 import { getPhoneVerificationService } from '../services/phone-verification.service';
 import { ApiResponse } from '../models/user.model';
@@ -8,6 +10,8 @@ import { BadRequestError, InternalServerError, NotFoundError } from '../models/e
 import { arePhoneNumbersEquivalent, normalizePhoneNumber } from '../utils/phone.utils';
 
 const db = getAppDatabaseService();
+const userDb = getDatabaseService();
+const emailService = getEmailService();
 const phoneVerificationService = getPhoneVerificationService();
 
 interface AuthRequest extends Request {
@@ -197,6 +201,13 @@ export class AdvertisementController {
       const { idType = 'identity_document', idNumber = 'N/A' } = req.body;
 
       const ad = await db.verifyAdvertisement(req.params.id, userId, idType, idNumber);
+
+      this.notifyAdminsAboutVerificationSubmission(ad, (req as AuthRequest).user?.email).catch(
+        (error) => {
+          console.error('Failed to notify admins about verification submission:', error);
+        }
+      );
+
       const response: ApiResponse = {
         success: true,
         message: 'Verification submitted successfully',
@@ -297,6 +308,50 @@ export class AdvertisementController {
       res.status(200).json(response);
     } catch (error) {
       next(error);
+    }
+  }
+
+  private async notifyAdminsAboutVerificationSubmission(
+    advertisement: Advertisement,
+    userEmail?: string,
+  ): Promise<void> {
+    const admins = await userDb.getAdminUsers();
+    const normalizedUserEmail = userEmail?.toLowerCase();
+    const recipientEmails = Array.from(
+      new Map(
+        admins
+          .filter(
+            (admin) => admin.email && admin.email.toLowerCase() !== normalizedUserEmail
+          )
+          .map((admin) => [admin.email.toLowerCase(), admin.email])
+      ).values()
+    );
+
+    if (recipientEmails.length === 0) {
+      console.warn(
+        `⚠️  No active admins found to notify about verification submission: ${advertisement.id}`
+      );
+      return;
+    }
+
+    const results = await Promise.allSettled(
+      recipientEmails.map((adminEmail) =>
+        emailService.sendDocumentVerificationSubmittedAlert(
+          adminEmail,
+          advertisement,
+          userEmail,
+        )
+      )
+    );
+
+    const failedCount = results.filter(
+      (result) => result.status === 'rejected' || (result.status === 'fulfilled' && !result.value)
+    ).length;
+
+    if (failedCount > 0) {
+      console.warn(
+        `⚠️  Failed to send ${failedCount} verification submission admin alert(s) for advertisement ${advertisement.id}`
+      );
     }
   }
 }
