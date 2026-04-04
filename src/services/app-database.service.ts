@@ -43,6 +43,7 @@ type PromotionVideoOwner = {
 };
 
 const ADVERTISEMENT_PRESENCE_TTL_MS = 2 * 60 * 1000;
+const PUBLIC_VIEWER_SESSION_TTL_MS = 3 * 60 * 1000;
 const PHOTO_VERIFICATION_REQUIRED_SETTING_KEY = 'photo_verification_required';
 const cloudinaryService = getCloudinaryService();
 type PhotoVerificationStatus = PhotoVerification['status'];
@@ -1366,6 +1367,67 @@ export class AppDatabaseService {
     await this.client
       .from('admin_settings')
       .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: 'key' });
+  }
+
+  async upsertPublicViewerSession(
+    sessionId: string,
+    userId?: string,
+    pathname?: string,
+  ): Promise<void> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + PUBLIC_VIEWER_SESSION_TTL_MS).toISOString();
+    const sanitizedPath = typeof pathname === 'string' ? pathname.trim().slice(0, 255) : null;
+
+    const { error } = await this.client
+      .from('public_viewer_sessions')
+      .upsert(
+        {
+          session_id: sessionId,
+          user_id: userId ?? null,
+          current_path: sanitizedPath,
+          is_authenticated: Boolean(userId),
+          last_seen_at: now.toISOString(),
+          expires_at: expiresAt,
+          updated_at: now.toISOString(),
+        },
+        { onConflict: 'session_id' },
+      );
+
+    if (error) {
+      throw new InternalServerError(
+        `Failed to update public viewer session: ${error.message}`,
+      );
+    }
+  }
+
+  async countActivePublicViewerSessions(): Promise<number> {
+    const { count, error } = await this.client
+      .from('public_viewer_sessions')
+      .select('session_id', { count: 'exact', head: true })
+      .gte('expires_at', new Date().toISOString());
+
+    if (error) {
+      throw new InternalServerError(
+        `Failed to count public viewer sessions: ${error.message}`,
+      );
+    }
+
+    return count || 0;
+  }
+
+  async countPublishedAdvertisements(): Promise<number> {
+    const { count, error } = await this.client
+      .from('advertisements')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_online', true);
+
+    if (error) {
+      throw new InternalServerError(
+        `Failed to count published advertisements: ${error.message}`,
+      );
+    }
+
+    return count || 0;
   }
 
   async isPhotoVerificationRequiredForNewUploads(): Promise<boolean> {

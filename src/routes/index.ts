@@ -15,6 +15,7 @@ import promotionPlanRoutes from './promotion-plan.routes';
 import adminRoutes from './admin.routes';
 import adminAuthRoutes from './admin-auth.routes';
 import contactRoutes from './contact.routes';
+import viewerMetricsRoutes from './viewer-metrics.routes';
 import { getBranding } from '../controllers/admin.controller';
 import { testEmail } from '../controllers/test-email.controller';
 import { authMiddleware } from '../middleware/auth.middleware';
@@ -54,6 +55,9 @@ router.use('/promotion-plans', promotionPlanRoutes);
 
 // Public branding endpoint (no auth required)
 router.get('/branding', getBranding);
+
+// Public viewer metrics endpoint (no auth required)
+router.use('/viewer-metrics', viewerMetricsRoutes);
 
 // Public contact form (no auth required)
 router.use('/contact', contactRoutes);

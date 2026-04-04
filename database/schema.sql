@@ -146,6 +146,10 @@ COMMENT ON COLUMN users.soft_deleted_at IS 'Soft delete timestamp; null means ac
 --   visible profile = advertisements.is_online = true
 --   currently online = visible profile + presence_expires_at > NOW()
 --   last seen online = last_seen_online_at
+-- Viewer simulation contract (migration 036):
+--   public_viewer_sessions tracks active browser sessions across public/admin pages.
+--   admin_settings.key = 'viewer_simulation_range_max' controls the random upper bound.
+--   admin_settings.key = 'viewer_simulation_started_at' anchors the daily +2 progression.
 
 CREATE TABLE IF NOT EXISTS promotion_plans (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -161,3 +165,21 @@ CREATE TABLE IF NOT EXISTS promotion_plans (
   CONSTRAINT promotion_plans_availability_status_check
     CHECK (availability_status IN ('AVAILABLE', 'COMING_SOON', 'HIDDEN'))
 );
+
+CREATE TABLE IF NOT EXISTS public_viewer_sessions (
+  session_id VARCHAR(120) PRIMARY KEY,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+  current_path VARCHAR(255),
+  is_authenticated BOOLEAN NOT NULL DEFAULT FALSE,
+  last_seen_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_public_viewer_sessions_expires_at
+  ON public_viewer_sessions (expires_at);
+
+CREATE INDEX IF NOT EXISTS idx_public_viewer_sessions_user_id
+  ON public_viewer_sessions (user_id)
+  WHERE user_id IS NOT NULL;

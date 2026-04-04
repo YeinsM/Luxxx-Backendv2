@@ -58,6 +58,11 @@ const ADVERTISEMENT_SETTING_KEYS = {
   advertisementPromoStickerEnabled: "advertisement_promo_sticker_enabled",
 } as const;
 
+const VIEWER_SIMULATION_SETTING_KEYS = {
+  viewerSimulationRangeMax: 'viewer_simulation_range_max',
+  viewerSimulationStartedAt: 'viewer_simulation_started_at',
+} as const;
+
 function parseBooleanAdminSetting(
   value: string | undefined,
   defaultValue: boolean,
@@ -75,6 +80,19 @@ function parseBooleanAdminSetting(
   }
 
   return defaultValue;
+}
+
+function parseIntegerAdminSetting(
+  value: string | undefined,
+  defaultValue: number,
+  minimumValue: number,
+): number {
+  const parsed = Number.parseInt(value ?? '', 10);
+  if (!Number.isFinite(parsed)) {
+    return defaultValue;
+  }
+
+  return Math.max(minimumValue, parsed);
 }
 
 function parseBooleanAdminInput(
@@ -700,6 +718,11 @@ export async function getAdminSettings(
           settings[ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled],
           true,
         ),
+        viewerSimulationRangeMax: parseIntegerAdminSetting(
+          settings[VIEWER_SIMULATION_SETTING_KEYS.viewerSimulationRangeMax],
+          50,
+          50,
+        ),
       },
     });
   } catch (err) {
@@ -757,6 +780,7 @@ export async function updateAdminSettings(
       promotionDurationSelectorEnabled,
       // Advertisement feature settings
       advertisementPromoStickerEnabled,
+      viewerSimulationRangeMax,
     } = req.body;
 
     const supabase = (getDatabaseService() as any).client;
@@ -950,6 +974,20 @@ export async function updateAdminSettings(
       upserts.push({
         key: ADVERTISEMENT_SETTING_KEYS.advertisementPromoStickerEnabled,
         value: String(parseBooleanAdminInput(advertisementPromoStickerEnabled, "advertisementPromoStickerEnabled")),
+        updated_at: now,
+      });
+    }
+    if (viewerSimulationRangeMax !== undefined) {
+      const parsed = Number(viewerSimulationRangeMax);
+      if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 50 || parsed > 5000) {
+        throw new BadRequestError(
+          'viewerSimulationRangeMax must be an integer greater than or equal to 50',
+        );
+      }
+
+      upserts.push({
+        key: VIEWER_SIMULATION_SETTING_KEYS.viewerSimulationRangeMax,
+        value: String(parsed),
         updated_at: now,
       });
     }
